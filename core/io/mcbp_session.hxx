@@ -76,6 +76,7 @@ class app_telemetry_value_recorder;
 namespace io
 {
 class mcbp_session_impl;
+class mcbp_session_unit_test_api;
 
 using command_handler = utils::movable_function<
   void(std::error_code, retry_reason, io::mcbp_message&&, std::optional<key_value_error_map_info>)>;
@@ -120,6 +121,8 @@ public:
 
   [[nodiscard]] auto log_prefix() const -> std::string;
   [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool;
+  // Removes the subscription without invoking its handler. Returns false when there is none.
+  [[nodiscard]] auto discard(std::uint32_t opaque) -> bool;
   [[nodiscard]] auto is_stopped() const -> bool;
   [[nodiscard]] auto is_bootstrapped() const -> bool;
   [[nodiscard]] auto next_opaque() -> std::uint32_t;
@@ -128,6 +131,7 @@ public:
   [[nodiscard]] auto context() const -> mcbp_context;
   [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool;
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>;
+  [[nodiscard]] auto unit_test_api() const -> mcbp_session_unit_test_api;
   [[nodiscard]] auto id() const -> const std::string&;
   [[nodiscard]] auto node_uuid() const -> const std::string&;
   // Resolve the app_telemetry recorder for this connection, cached per connection and re-resolved

@@ -22,12 +22,17 @@
 
 #include <couchbase/tracing/request_span.hxx>
 
+#include <asio/io_context.hpp>
+
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <new>
 #include <optional>
 #include <string>
+#include <thread>
 
 namespace
 {
@@ -254,6 +259,233 @@ the_typed_result_setter_avoids_the_tag_name_allocations([[maybe_unused]] context
   assert_true(typed_allocs <= tag_allocs, "the typed path is never worse than the tag path");
 }
 #endif
+
+void
+wait_for_nonzero_system_clock_us()
+{
+  const auto before = std::chrono::system_clock::now();
+  while (
+    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - before)
+      .count() < 2) {
+    std::this_thread::yield();
+  }
+}
+
+void
+threshold_tracer_rolls_up_dispatch_attributes_and_ignores_late_children(
+  [[maybe_unused]] context& ctx)
+{
+  asio::io_context io{};
+  couchbase::core::tracing::threshold_logging_options opts{};
+  opts.key_value_threshold = std::chrono::milliseconds{ 0 };
+  opts.threshold_sample_size = 16;
+  auto tracer = std::make_shared<couchbase::core::tracing::threshold_logging_tracer>(io, opts);
+
+  auto op_span = tracer->start_span("upsert", nullptr);
+  op_span->add_tag(couchbase::core::tracing::attributes::op::service,
+                   couchbase::core::tracing::service::key_value);
+
+  auto first = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+  first->add_tag(couchbase::core::tracing::attributes::dispatch::operation_id, "0x10");
+  assert_true(first->try_set_dispatch_local_id("conn-first"), "captures first local id");
+  assert_true(first->try_set_dispatch_result(120, "node-a.example", 11210),
+              "captures first result");
+  first->end();
+
+  auto second = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+  assert_true(second->try_set_dispatch_operation_id(0x2b), "captures second typed opaque");
+  assert_true(second->try_set_dispatch_local_id("conn-second"), "captures second local id");
+  assert_true(second->try_set_dispatch_result(80, "node-b.example", 11210),
+              "captures second result");
+  second->end();
+
+  auto late = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+  assert_true(late->try_set_dispatch_operation_id(0xdead), "captures late opaque");
+  assert_true(late->try_set_dispatch_local_id("conn-late"), "captures late local id");
+  assert_true(late->try_set_dispatch_result(500, "node-late.example", 11210),
+              "captures late result");
+
+  wait_for_nonzero_system_clock_us();
+  op_span->end();
+  late->end();
+  op_span->end();
+
+  const auto report = tracer->flush_and_create_output().value_or(std::string{});
+  assert_contains(report, R"("count":1)", "operation span is reported once");
+  assert_contains(report, R"("last_operation_id":"0x2b")", "typed opaque supersedes string tag");
+  assert_contains(report, R"("last_local_id":"conn-second")", "reports second local id");
+  assert_contains(
+    report, R"("last_remote_socket":"node-b.example:11210")", "reports second socket");
+  assert_contains(report, R"("last_server_duration_us":80)", "reports second server duration");
+  assert_contains(report, R"("total_server_duration_us":200)", "sums both completed dispatches");
+}
+
+void
+threshold_tracer_handles_concurrent_child_and_parent_end_without_a_race(
+  [[maybe_unused]] context& ctx)
+{
+  constexpr int rounds = 300;
+  asio::io_context io{};
+  couchbase::core::tracing::threshold_logging_options opts{};
+  opts.key_value_threshold = std::chrono::milliseconds{ 0 };
+  opts.threshold_sample_size = static_cast<std::size_t>(rounds) * 2;
+  auto tracer = std::make_shared<couchbase::core::tracing::threshold_logging_tracer>(io, opts);
+
+  for (int round = 0; round < rounds; ++round) {
+    auto op_span = tracer->start_span("get_any_replica", nullptr);
+    op_span->add_tag(couchbase::core::tracing::attributes::op::service,
+                     couchbase::core::tracing::service::key_value);
+
+    auto child_a = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+    (void)child_a->try_set_dispatch_operation_id(0x100U + static_cast<std::uint32_t>(round));
+    (void)child_a->try_set_dispatch_local_id("replica-connection-alpha-long-identifier");
+    (void)child_a->try_set_dispatch_result(95, "replica-alpha.example.internal", 11210);
+
+    auto child_b = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+    (void)child_b->try_set_dispatch_operation_id(0x200U + static_cast<std::uint32_t>(round));
+    (void)child_b->try_set_dispatch_local_id("replica-connection-bravo-long-identifier");
+    (void)child_b->try_set_dispatch_result(140, "replica-bravo.example.internal", 11210);
+
+    wait_for_nonzero_system_clock_us();
+
+    std::atomic<int> ready{ 0 };
+    auto wait_all = [&ready] {
+      ready.fetch_add(1, std::memory_order_acq_rel);
+      while (ready.load(std::memory_order_acquire) < 3) {
+        std::this_thread::yield();
+      }
+    };
+
+    std::thread one([&child_a, &wait_all] {
+      wait_all();
+      child_a->end();
+    });
+    std::thread two([&child_b, &wait_all] {
+      wait_all();
+      child_b->end();
+    });
+    wait_all();
+    op_span->end();
+
+    one.join();
+    two.join();
+  }
+
+  const auto report = tracer->flush_and_create_output().value_or(std::string{});
+  assert_contains(report, R"("count":)" + std::to_string(rounds), "every parent span reports once");
+}
+
+void
+threshold_tracer_preserves_all_concurrent_dispatch_children([[maybe_unused]] context& ctx)
+{
+  constexpr int rounds = 200;
+  asio::io_context io{};
+  couchbase::core::tracing::threshold_logging_options opts{};
+  opts.key_value_threshold = std::chrono::milliseconds{ 0 };
+  opts.threshold_sample_size = 16;
+  auto tracer = std::make_shared<couchbase::core::tracing::threshold_logging_tracer>(io, opts);
+
+  for (int round = 0; round < rounds; ++round) {
+    auto op_span = tracer->start_span("get_all_replicas", nullptr);
+    op_span->add_tag(couchbase::core::tracing::attributes::op::service,
+                     couchbase::core::tracing::service::key_value);
+
+    auto child_a = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+    (void)child_a->try_set_dispatch_operation_id(0x101U);
+    (void)child_a->try_set_dispatch_local_id("conn-alpha");
+    (void)child_a->try_set_dispatch_result(95, "alpha.example.internal", 11210);
+
+    auto child_b = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+    (void)child_b->try_set_dispatch_operation_id(0x202U);
+    (void)child_b->try_set_dispatch_local_id("conn-bravo");
+    (void)child_b->try_set_dispatch_result(140, "bravo.example.internal", 11210);
+
+    wait_for_nonzero_system_clock_us();
+
+    std::atomic<int> ready{ 0 };
+    auto wait_both = [&ready] {
+      ready.fetch_add(1, std::memory_order_acq_rel);
+      while (ready.load(std::memory_order_acquire) < 2) {
+        std::this_thread::yield();
+      }
+    };
+
+    std::thread one([&child_a, &wait_both] {
+      wait_both();
+      child_a->end();
+    });
+    std::thread two([&child_b, &wait_both] {
+      wait_both();
+      child_b->end();
+    });
+    one.join();
+    two.join();
+
+    op_span->end();
+
+    const auto report = tracer->flush_and_create_output().value_or(std::string{});
+    assert_contains(
+      report, R"("total_server_duration_us":235)", "sums both concurrent dispatch children");
+    const bool alpha_last =
+      report.find(R"("last_server_duration_us":95)") != std::string::npos &&
+      report.find(R"("last_operation_id":"0x101")") != std::string::npos &&
+      report.find(R"("last_local_id":"conn-alpha")") != std::string::npos &&
+      report.find(R"("last_remote_socket":"alpha.example.internal:11210")") != std::string::npos;
+    const bool bravo_last =
+      report.find(R"("last_server_duration_us":140)") != std::string::npos &&
+      report.find(R"("last_operation_id":"0x202")") != std::string::npos &&
+      report.find(R"("last_local_id":"conn-bravo")") != std::string::npos &&
+      report.find(R"("last_remote_socket":"bravo.example.internal:11210")") != std::string::npos;
+    assert_true(alpha_last != bravo_last, "reports one coherent last child without dropping it");
+  }
+}
+
+void
+threshold_tracer_releases_completed_dispatch_children_before_parent_ends(
+  [[maybe_unused]] context& ctx)
+{
+  asio::io_context io{};
+  couchbase::core::tracing::threshold_logging_options opts{};
+  opts.key_value_threshold = std::chrono::milliseconds{ 0 };
+  opts.threshold_sample_size = 16;
+  auto tracer = std::make_shared<couchbase::core::tracing::threshold_logging_tracer>(io, opts);
+
+  auto op_span = tracer->start_span("upsert", nullptr);
+  op_span->add_tag(couchbase::core::tracing::attributes::op::service,
+                   couchbase::core::tracing::service::key_value);
+
+  constexpr std::uint32_t retry_attempts = 32;
+  for (std::uint32_t i = 1; i <= retry_attempts; ++i) {
+    auto attempt = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+    std::weak_ptr<couchbase::tracing::request_span> weak_attempt = attempt;
+    (void)attempt->try_set_dispatch_operation_id(0x100U + i);
+    (void)attempt->try_set_dispatch_local_id("conn-retry-" + std::to_string(i));
+    (void)attempt->try_set_dispatch_result(10, "node-retry.example", 11210);
+    attempt->end();
+    attempt.reset();
+    assert_true(weak_attempt.expired(), "ended retry child is released before parent ends");
+  }
+
+  auto cancelled = tracer->start_span(couchbase::core::tracing::operation::step_dispatch, op_span);
+  std::weak_ptr<couchbase::tracing::request_span> weak_cancelled = cancelled;
+  (void)cancelled->try_set_dispatch_operation_id(0x3ffU);
+  (void)cancelled->try_set_dispatch_local_id("conn-cancelled");
+  cancelled->end();
+  cancelled.reset();
+  assert_true(weak_cancelled.expired(), "ended cancelled child is released before parent ends");
+
+  wait_for_nonzero_system_clock_us();
+  op_span->end();
+
+  const auto report = tracer->flush_and_create_output().value_or(std::string{});
+  assert_contains(report, R"("count":1)", "operation span is reported once");
+  assert_contains(report, R"("total_server_duration_us":320)", "sums every retry server duration");
+  assert_contains(report, R"("last_server_duration_us":10)", "keeps last answered server duration");
+  assert_contains(
+    report, R"("last_remote_socket":"node-retry.example:11210")", "keeps last answered socket");
+  assert_contains(report, R"("last_operation_id":"0x3ff")", "keeps latest attempt opaque");
+  assert_contains(report, R"("last_local_id":"conn-cancelled")", "keeps latest attempt local id");
+}
 } // namespace
 
 auto
@@ -267,6 +499,10 @@ tests() -> test_suite
       { CASE(a_captured_dispatch_operation_id_formats_to_the_reported_string) },
       { CASE(a_span_does_not_capture_typed_dispatch_metadata_by_default) },
       { CASE(a_span_may_opt_into_capturing_typed_dispatch_metadata) },
+      { CASE(threshold_tracer_rolls_up_dispatch_attributes_and_ignores_late_children) },
+      { CASE(threshold_tracer_handles_concurrent_child_and_parent_end_without_a_race) },
+      { CASE(threshold_tracer_preserves_all_concurrent_dispatch_children) },
+      { CASE(threshold_tracer_releases_completed_dispatch_children_before_parent_ends) },
 #ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
       { CASE(the_typed_local_id_setter_avoids_the_tag_name_allocation) },
       { CASE(the_typed_result_setter_avoids_the_tag_name_allocations) },

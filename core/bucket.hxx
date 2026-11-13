@@ -139,9 +139,9 @@ public:
         });
       }
     }
-    if (!cmd->handler_) {
-      // Completed. retry_backoff.cancel() in invoke_handler() does not recall a retry completion
-      // already queued with the deadline, and no deadline remains to bound another lap.
+    if (cmd->is_completed()) {
+      // Completed. retry_backoff.cancel() in complete() does not recall a retry completion already
+      // queued with the deadline, and no deadline remains to bound another lap.
       return;
     }
     if (is_closed()) {
@@ -269,7 +269,7 @@ public:
   void schedule_for_retry(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd,
                           std::chrono::milliseconds duration)
   {
-    if (!cmd->handler_) {
+    if (cmd->is_completed()) {
       // Completed; arming the backoff would start a lap that no deadline bounds.
       return;
     }

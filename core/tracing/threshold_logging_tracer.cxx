@@ -33,6 +33,7 @@
 #include <tao/json/value.hpp>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -40,6 +41,64 @@
 
 namespace couchbase::core::tracing
 {
+namespace
+{
+enum class encoded_service : std::uint8_t {
+  unset = 0,
+  key_value = 1,
+  query = 2,
+  view = 3,
+  search = 4,
+  analytics = 5,
+  management = 6,
+};
+
+[[nodiscard]] auto
+encode_service(const std::string& service_name) -> encoded_service
+{
+  if (service_name == tracing::service::key_value) {
+    return encoded_service::key_value;
+  }
+  if (service_name == tracing::service::query) {
+    return encoded_service::query;
+  }
+  if (service_name == tracing::service::view) {
+    return encoded_service::view;
+  }
+  if (service_name == tracing::service::search) {
+    return encoded_service::search;
+  }
+  if (service_name == tracing::service::analytics) {
+    return encoded_service::analytics;
+  }
+  if (service_name == tracing::service::management) {
+    return encoded_service::management;
+  }
+  return encoded_service::unset;
+}
+
+[[nodiscard]] auto
+decode_service(encoded_service value) -> std::optional<service_type>
+{
+  switch (value) {
+    case encoded_service::key_value:
+      return service_type::key_value;
+    case encoded_service::query:
+      return service_type::query;
+    case encoded_service::view:
+      return service_type::view;
+    case encoded_service::search:
+      return service_type::search;
+    case encoded_service::analytics:
+      return service_type::analytics;
+    case encoded_service::management:
+      return service_type::management;
+    case encoded_service::unset:
+      break;
+  }
+  return {};
+}
+} // namespace
 auto
 format_dispatch_operation_id(std::uint32_t opaque) -> std::string
 {
@@ -70,36 +129,195 @@ class threshold_logging_span
   , public std::enable_shared_from_this<threshold_logging_span>
 {
 private:
+  static constexpr std::uint64_t rollup_sealed = 1ULL << 63U;
+  static constexpr std::uint64_t rollup_report_pending = 1ULL << 62U;
+  static constexpr std::uint64_t rollup_folding = 1ULL << 61U;
+  static constexpr std::uint64_t rollup_active_mask = rollup_folding - 1ULL;
+
+  struct rollup_node {
+    rollup_node* next{ nullptr };
+    threshold_logging_span* span{ nullptr };
+  };
+
+  static void release_rollup_list(rollup_node* head) noexcept
+  {
+    while (head != nullptr) {
+      auto* const next = head->next;
+      head->next = nullptr;
+      head->span->self_rollup_.reset();
+      head = next;
+    }
+  }
+
+  void fold_batch(rollup_node* batch) noexcept
+  {
+    rollup_node* ordered{ nullptr };
+    while (batch != nullptr) {
+      auto* const next = batch->next;
+      batch->next = ordered;
+      ordered = batch;
+      batch = next;
+    }
+    while (ordered != nullptr) {
+      auto* const next = ordered->next;
+      ordered->next = nullptr;
+      auto* const child = ordered->span;
+      if (child->last_local_id_.has_value()) {
+        folded_local_id_ = std::move(child->last_local_id_);
+      }
+      if (child->operation_id_.has_value()) {
+        folded_operation_id_opaque_.reset();
+        folded_operation_id_ = std::move(child->operation_id_);
+      } else if (child->operation_id_opaque_.has_value()) {
+        folded_operation_id_.reset();
+        folded_operation_id_opaque_ = child->operation_id_opaque_;
+      }
+      if (child->peer_hostname_.has_value()) {
+        folded_peer_hostname_ = std::move(child->peer_hostname_);
+      }
+      if (child->peer_port_.has_value()) {
+        folded_peer_port_ = child->peer_port_;
+      }
+      if (child->last_server_duration_us_ > 0) {
+        folded_last_server_duration_us_ = child->last_server_duration_us_;
+        folded_total_server_duration_us_ += child->last_server_duration_us_;
+      }
+      child->self_rollup_.reset();
+      ordered = next;
+    }
+  }
+
+  void try_fold_rollup() noexcept
+  {
+    if ((rollup_state_.fetch_or(rollup_folding, std::memory_order_acq_rel) & rollup_folding) != 0) {
+      return;
+    }
+    for (;;) {
+      if (auto* const batch = rollup_head_.exchange(nullptr, std::memory_order_acq_rel);
+          batch != nullptr) {
+        fold_batch(batch);
+      }
+      rollup_state_.fetch_and(~rollup_folding, std::memory_order_acq_rel);
+      if (rollup_head_.load(std::memory_order_acquire) == nullptr) {
+        return;
+      }
+      if ((rollup_state_.fetch_or(rollup_folding, std::memory_order_acq_rel) & rollup_folding) !=
+          0) {
+        return;
+      }
+    }
+  }
+
+  void finish_rollup_participant()
+  {
+    auto cur = rollup_state_.load(std::memory_order_acquire);
+    for (;;) {
+      const auto remaining_active = (cur & rollup_active_mask) - 1ULL;
+      const bool fire_report = remaining_active == 0 && (cur & rollup_report_pending) != 0;
+      auto next = (cur & ~rollup_active_mask) | remaining_active;
+      if (fire_report) {
+        next &= ~rollup_report_pending;
+      }
+      if (rollup_state_.compare_exchange_weak(
+            cur, next, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        if (fire_report) {
+          try_fold_rollup();
+          tracer_->report(shared_from_this());
+        }
+        return;
+      }
+    }
+  }
+
+  void rollup_child(threshold_logging_span& child)
+  {
+    if ((rollup_state_.load(std::memory_order_relaxed) & rollup_sealed) != 0) {
+      return;
+    }
+    const auto prev = rollup_state_.fetch_add(1ULL, std::memory_order_acquire);
+    if ((prev & rollup_sealed) != 0) {
+      finish_rollup_participant();
+      return;
+    }
+
+    child.self_rollup_ = child.shared_from_this();
+    auto* head = rollup_head_.load(std::memory_order_relaxed);
+    child.rollup_node_.next = head;
+    while (!rollup_head_.compare_exchange_weak(
+      head, &child.rollup_node_, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+      child.rollup_node_.next = head;
+    }
+
+    try_fold_rollup();
+    finish_rollup_participant();
+  }
+
   std::chrono::system_clock::time_point start_{ std::chrono::system_clock::now() };
-  std::chrono::microseconds total_duration_{ 0 };
+  std::atomic<std::int64_t> total_duration_us_{ 0 };
+  std::uint64_t total_server_duration_us_{ 0 };
 
   std::uint64_t last_server_duration_us_{ 0 };
-  std::uint64_t total_server_duration_us_{ 0 };
   std::optional<std::string> operation_id_{};
   std::optional<std::uint32_t> operation_id_opaque_{};
   std::optional<std::string> last_local_id_{};
-  std::optional<std::string> service_{};
   std::optional<std::string> peer_hostname_{};
   std::optional<std::uint16_t> peer_port_{};
 
+  std::uint64_t folded_total_server_duration_us_{ 0 };
+  std::uint64_t folded_last_server_duration_us_{ 0 };
+  std::optional<std::string> folded_operation_id_{};
+  std::optional<std::uint32_t> folded_operation_id_opaque_{};
+  std::optional<std::string> folded_local_id_{};
+  std::optional<std::string> folded_peer_hostname_{};
+  std::optional<std::uint16_t> folded_peer_port_{};
+
   std::shared_ptr<threshold_logging_tracer> tracer_{};
+  // Weak reference avoids a parent -> self_rollup_ -> parent cycle while a child is being folded.
+  std::weak_ptr<couchbase::tracing::request_span> parent_{};
+  const bool is_dispatch_{ false };
+  std::atomic<encoded_service> service_{ encoded_service::unset };
+  std::atomic_bool ended_{ false };
+  rollup_node rollup_node_{ nullptr, this };
+  std::shared_ptr<threshold_logging_span> self_rollup_{};
+  // Gates child rollup against parent end() and serialises folding into folded_* without locks.
+  std::atomic<std::uint64_t> rollup_state_{ 0 };
+  std::atomic<rollup_node*> rollup_head_{ nullptr };
 
 public:
-  threshold_logging_span(std::string name,
+  struct rollup_summary {
+    std::uint64_t last_server_duration_us{ 0 };
+    std::uint64_t total_server_duration_us{ 0 };
+    std::optional<std::string> last_operation_id{};
+    std::optional<std::string> last_local_id{};
+    std::optional<std::string> last_remote_socket{};
+  };
+
+  threshold_logging_span(std::string span_name,
                          std::shared_ptr<threshold_logging_tracer> tracer,
-                         std::shared_ptr<request_span> parent = nullptr)
-    : request_span(std::move(name), std::move(parent))
+                         const std::shared_ptr<request_span>& parent = nullptr)
+    : request_span(std::move(span_name))
     , tracer_{ std::move(tracer) }
+    , parent_{ parent }
+    , is_dispatch_{ name() == tracing::operation::step_dispatch }
   {
+  }
+
+  ~threshold_logging_span() override
+  {
+    release_rollup_list(rollup_head_.exchange(nullptr, std::memory_order_acquire));
   }
 
   void add_tag(const std::string& tag_name, std::uint64_t value) override
   {
+    if (ended_.load(std::memory_order_relaxed)) {
+      return;
+    }
     if (tag_name == tracing::attributes::dispatch::server_duration) {
       last_server_duration_us_ = value;
-      if (name() != tracing::operation::step_dispatch) {
+      if (!is_dispatch_) {
         total_server_duration_us_ += value;
       }
+      return;
     }
     if (tag_name == tracing::attributes::dispatch::peer_port) {
       peer_port_ = static_cast<std::uint16_t>(value);
@@ -109,13 +327,20 @@ public:
   void add_tag(const std::string& tag_name, const std::string& value) override
   {
     if (tag_name == tracing::attributes::op::service) {
-      service_ = value;
+      service_.store(encode_service(value), std::memory_order_relaxed);
+      return;
+    }
+    if (ended_.load(std::memory_order_relaxed)) {
+      return;
     }
     if (tag_name == tracing::attributes::dispatch::local_id) {
       last_local_id_ = value;
+      return;
     }
     if (tag_name == tracing::attributes::dispatch::operation_id) {
+      operation_id_opaque_.reset();
       operation_id_ = value;
+      return;
     }
     if (tag_name == tracing::attributes::dispatch::peer_address) {
       peer_hostname_ = value;
@@ -124,17 +349,19 @@ public:
 
   [[nodiscard]] auto try_set_dispatch_operation_id(std::uint32_t opaque) -> bool override
   {
-    // Capture the raw opaque; it is formatted lazily in operation_id(), and only when this span is
-    // actually reported (i.e. exceeds the threshold), which keeps the formatting off the hot path.
-    operation_id_opaque_ = opaque;
+    // Keep the raw opaque on the hot path; operation_id() formats it only when reported.
+    if (!ended_.load(std::memory_order_relaxed)) {
+      operation_id_.reset();
+      operation_id_opaque_ = opaque;
+    }
     return true;
   }
 
   [[nodiscard]] auto try_set_dispatch_local_id(const std::string& local_id) -> bool override
   {
-    // Capture directly, bypassing the tag-name string that add_tag() would materialize on the hot
-    // path (see request_span::try_set_dispatch_local_id).
-    last_local_id_ = local_id;
+    if (!ended_.load(std::memory_order_relaxed)) {
+      last_local_id_ = local_id;
+    }
     return true;
   }
 
@@ -142,74 +369,27 @@ public:
                                              const std::string& peer_address,
                                              std::uint16_t peer_port) -> bool override
   {
-    // Mirror the add_tag() bookkeeping without materializing any tag-name strings, including the
-    // same rule for the running total: it is accumulated only on non-dispatch spans, so a dispatch
-    // span records last_server_duration_us_ and leaves the total to be rolled up on its parent in
-    // end(). (In current wiring this setter only runs on the dispatch span, but the guard is kept
-    // so the two paths stay behaviourally identical.)
-    last_server_duration_us_ = server_duration_us;
-    if (name() != tracing::operation::step_dispatch) {
-      total_server_duration_us_ += server_duration_us;
+    if (!ended_.load(std::memory_order_relaxed)) {
+      last_server_duration_us_ = server_duration_us;
+      peer_hostname_ = peer_address;
+      peer_port_ = peer_port;
+      if (!is_dispatch_) {
+        total_server_duration_us_ += server_duration_us;
+      }
     }
-    peer_hostname_ = peer_address;
-    peer_port_ = peer_port;
     return true;
   }
 
   void end() override;
 
-  void set_last_local_id(const std::string& id)
+  [[nodiscard]] auto parent() const -> std::shared_ptr<request_span> override
   {
-    last_local_id_ = id;
-  }
-
-  void set_operation_id(const std::string& id)
-  {
-    operation_id_ = id;
-  }
-
-  void set_operation_id_opaque(std::uint32_t opaque)
-  {
-    operation_id_opaque_ = opaque;
-  }
-
-  void set_peer_hostname(const std::string& hostname)
-  {
-    peer_hostname_ = hostname;
-  }
-
-  void set_peer_port(const std::uint16_t port)
-  {
-    peer_port_ = port;
-  }
-
-  [[nodiscard]] auto last_remote_socket() const -> std::optional<std::string>
-  {
-    if (peer_hostname_.has_value() && peer_port_.has_value()) {
-      return fmt::format("{}:{}", peer_hostname_.value(), peer_port_.value());
-    }
-    return {};
-  }
-
-  void add_server_duration(const std::uint64_t duration_us)
-  {
-    last_server_duration_us_ = duration_us;
-    total_server_duration_us_ += duration_us;
+    return parent_.lock();
   }
 
   [[nodiscard]] auto total_duration() const -> std::chrono::microseconds
   {
-    return total_duration_;
-  }
-
-  [[nodiscard]] auto last_server_duration_us() const -> std::uint64_t
-  {
-    return last_server_duration_us_;
-  }
-
-  [[nodiscard]] auto total_server_duration_us() const -> std::uint64_t
-  {
-    return total_server_duration_us_;
+    return std::chrono::microseconds{ total_duration_us_.load(std::memory_order_relaxed) };
   }
 
   [[nodiscard]] auto operation_id() const -> std::optional<std::string>
@@ -218,47 +398,47 @@ public:
       return operation_id_;
     }
     if (operation_id_opaque_.has_value()) {
-      // Build the string only here — on the reporting path, never on the hot path.
+      // Build the string only here, on the reporting path, never on the hot path.
       return format_dispatch_operation_id(operation_id_opaque_.value());
     }
     return {};
   }
 
-  [[nodiscard]] auto last_local_id() const -> std::optional<std::string>
+  [[nodiscard]] auto summarize_rollup() const -> rollup_summary
   {
-    return last_local_id_;
+    rollup_summary summary{};
+    summary.total_server_duration_us = total_server_duration_us_ + folded_total_server_duration_us_;
+    summary.last_server_duration_us = folded_last_server_duration_us_ > 0
+                                        ? folded_last_server_duration_us_
+                                        : last_server_duration_us_;
+
+    if (folded_operation_id_.has_value()) {
+      summary.last_operation_id = folded_operation_id_;
+    } else if (folded_operation_id_opaque_.has_value()) {
+      summary.last_operation_id = format_dispatch_operation_id(folded_operation_id_opaque_.value());
+    } else {
+      summary.last_operation_id = operation_id();
+    }
+
+    summary.last_local_id = folded_local_id_.has_value() ? folded_local_id_ : last_local_id_;
+
+    const auto& peer_hostname =
+      folded_peer_hostname_.has_value() ? folded_peer_hostname_ : peer_hostname_;
+    const auto peer_port = folded_peer_port_.has_value() ? folded_peer_port_ : peer_port_;
+    if (peer_hostname.has_value() && peer_port.has_value()) {
+      summary.last_remote_socket = fmt::format("{}:{}", peer_hostname.value(), peer_port.value());
+    }
+    return summary;
   }
 
   [[nodiscard]] auto is_key_value() const -> bool
   {
-    return service_.has_value() && service_.value() == tracing::service::key_value;
+    return service_.load(std::memory_order_relaxed) == encoded_service::key_value;
   }
 
   [[nodiscard]] auto service() const -> std::optional<service_type>
   {
-    if (!service_.has_value()) {
-      return {};
-    }
-    const auto& service_name = service_.value();
-    if (service_name == tracing::service::key_value) {
-      return service_type::key_value;
-    }
-    if (service_name == tracing::service::query) {
-      return service_type::query;
-    }
-    if (service_name == tracing::service::view) {
-      return service_type::view;
-    }
-    if (service_name == tracing::service::search) {
-      return service_type::search;
-    }
-    if (service_name == tracing::service::analytics) {
-      return service_type::analytics;
-    }
-    if (service_name == tracing::service::management) {
-      return service_type::management;
-    }
-    return {};
+    return decode_service(service_.load(std::memory_order_relaxed));
   }
 };
 
@@ -267,26 +447,27 @@ using fixed_span_queue = utils::concurrent_fixed_priority_queue<reported_span>;
 auto
 convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
 {
+  const auto rollup = span->summarize_rollup();
   tao::json::value entry{
     { "operation_name", span->name() },
     { "total_duration_us",
       std::chrono::duration_cast<std::chrono::microseconds>(span->total_duration()).count() }
   };
   if (span->is_key_value()) {
-    entry["last_server_duration_us"] = span->last_server_duration_us();
-    entry["total_server_duration_us"] = span->total_server_duration_us();
+    entry["last_server_duration_us"] = rollup.last_server_duration_us;
+    entry["total_server_duration_us"] = rollup.total_server_duration_us;
   }
 
-  if (const auto operation_id = span->operation_id(); operation_id.has_value()) {
-    entry["last_operation_id"] = operation_id.value();
+  if (rollup.last_operation_id.has_value()) {
+    entry["last_operation_id"] = rollup.last_operation_id.value();
   }
 
-  if (span->last_local_id().has_value()) {
-    entry["last_local_id"] = span->last_local_id().value();
+  if (rollup.last_local_id.has_value()) {
+    entry["last_local_id"] = rollup.last_local_id.value();
   }
 
-  if (span->last_remote_socket().has_value()) {
-    entry["last_remote_socket"] = span->last_remote_socket().value();
+  if (rollup.last_remote_socket.has_value()) {
+    entry["last_remote_socket"] = rollup.last_remote_socket.value();
   }
 
   return { span->total_duration(), std::move(entry) };
@@ -342,6 +523,31 @@ public:
         queue->second.emplace(convert(span));
       }
     }
+  }
+
+  [[nodiscard]] auto flush_and_create_output() -> std::optional<std::string>
+  {
+    tao::json::value reports = tao::json::empty_object;
+    for (auto& [service, threshold_queue] : threshold_queues_) {
+      if (threshold_queue.empty()) {
+        continue;
+      }
+      auto [queue, dropped_count] = threshold_queue.steal_data();
+      const auto total_count = queue.size() + dropped_count;
+      tao::json::value entries = tao::json::empty_array;
+      while (!queue.empty()) {
+        entries.emplace_back(queue.top().payload);
+        queue.pop();
+      }
+      reports[fmt::format("{}", service)] = tao::json::value{
+        { "count", total_count },
+        { "top", std::move(entries) },
+      };
+    }
+    if (reports.get_object().empty()) {
+      return std::nullopt;
+    }
+    return utils::json::generate(reports);
   }
 
 private:
@@ -407,6 +613,12 @@ threshold_logging_tracer::report(const std::shared_ptr<threshold_logging_span>& 
   impl_->check_threshold(span);
 }
 
+auto
+threshold_logging_tracer::flush_and_create_output() -> std::optional<std::string>
+{
+  return impl_->flush_and_create_output();
+}
+
 threshold_logging_tracer::threshold_logging_tracer(asio::io_context& ctx,
                                                    threshold_logging_options options)
   : options_{ options }
@@ -429,33 +641,35 @@ threshold_logging_tracer::stop()
 void
 threshold_logging_span::end()
 {
-  total_duration_ = std::chrono::duration_cast<std::chrono::microseconds>(
-    std::chrono::system_clock::now() - start_);
-  if (service_.has_value()) {
-    tracer_->report(shared_from_this());
+  if (ended_.exchange(true, std::memory_order_acq_rel)) {
+    return;
   }
-  if (name() == tracing::operation::step_dispatch) {
-    // Transfer the relevant attributes to the operation-level span
-    if (const auto p = std::dynamic_pointer_cast<threshold_logging_span>(parent()); p) {
-      if (last_local_id_.has_value()) {
-        p->set_last_local_id(last_local_id_.value());
+
+  const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::system_clock::now() - start_);
+  total_duration_us_.store(duration.count(), std::memory_order_relaxed);
+
+  const auto svc = service();
+  const bool should_report =
+    svc.has_value() && duration > tracer_->threshold_for_service(svc.value());
+
+  auto cur = rollup_state_.load(std::memory_order_acquire);
+  for (;;) {
+    const bool defer_report = should_report && (cur & rollup_active_mask) != 0;
+    const auto next = cur | rollup_sealed | (defer_report ? rollup_report_pending : 0ULL);
+    if (rollup_state_.compare_exchange_weak(
+          cur, next, std::memory_order_acq_rel, std::memory_order_acquire)) {
+      if (should_report && !defer_report) {
+        try_fold_rollup();
+        tracer_->report(shared_from_this());
       }
-      if (operation_id_.has_value()) {
-        p->set_operation_id(operation_id_.value());
-      } else if (operation_id_opaque_.has_value()) {
-        // Propagate the raw opaque so the parent still reports the operation id, while keeping the
-        // (rarely needed) formatting deferred to the parent's reporting path.
-        p->set_operation_id_opaque(operation_id_opaque_.value());
-      }
-      if (peer_hostname_.has_value()) {
-        p->set_peer_hostname(peer_hostname_.value());
-      }
-      if (peer_port_.has_value()) {
-        p->set_peer_port(peer_port_.value());
-      }
-      if (last_server_duration_us_ > 0) {
-        p->add_server_duration(last_server_duration_us_);
-      }
+      break;
+    }
+  }
+
+  if (is_dispatch_) {
+    if (const auto p = std::dynamic_pointer_cast<threshold_logging_span>(parent()); p != nullptr) {
+      p->rollup_child(*this);
     }
   }
 }
