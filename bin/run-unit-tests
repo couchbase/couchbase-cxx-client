@@ -48,4 +48,12 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} ${CB_CTEST_EXTRAS} --output-on-failure --label-regex 'unit' --output-junit results.xml
+# Optional test sharding across parallel CI jobs. ctest applies --label-regex before
+# -I start,,stride, so the shards partition the unit suite with no overlap.
+CB_TEST_SHARD_INDEX=${CB_TEST_SHARD_INDEX:-}
+CB_TEST_SHARD_TOTAL=${CB_TEST_SHARD_TOTAL:-}
+CB_CTEST_SHARD=""
+if [ -n "${CB_TEST_SHARD_INDEX}" ] && [ -n "${CB_TEST_SHARD_TOTAL}" ]; then
+    CB_CTEST_SHARD="-I ${CB_TEST_SHARD_INDEX},,${CB_TEST_SHARD_TOTAL}"
+fi
+${CB_CTEST} ${CB_CTEST_EXTRAS} ${CB_CTEST_SHARD} --output-on-failure --label-regex 'unit' --output-junit results.xml
