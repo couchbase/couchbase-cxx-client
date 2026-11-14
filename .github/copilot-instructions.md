@@ -1,82 +1,85 @@
-# Couchbase C++ Client — Copilot Instructions
+# Couchbase C++ Client: Copilot Instructions
 
-High-performance C++17 client library for Couchbase Server. Used by both Copilot
-code review and Copilot coding agent.
+Instructions for Copilot code review and coding agents working on this
+repository.
 
-## Build system
+## References
 
-CMake 3.19+ is required. Standard build:
+Do not restate or guess what these files already specify:
 
-```bash
-cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
-cmake --build build -j$(nproc)
-```
+- [README.md](../README.md): build commands, `ctest` environment variables,
+  formatting and lint checks, and contributor conventions.
+- [test/README.md](../test/README.md): the standard every test is written and
+  reviewed against (`test/framework/`, watching assertions fail, choosing a
+  venue that can distinguish the failure, requirements rather than skip guards,
+  and the reviewer's checklist). New tests use `test/framework/`; Catch2 is
+  being removed (CXXCBC-945) and no new test may use it.
+- [test/cng/README.md](../test/cng/README.md): `couchbase2://` (Cloud Native
+  Gateway) tests, including local k3d/Autonomous Operator constraints and the
+  `pins_callback_queue` / `pin_callback_queue()` requirement for clusterless
+  in-process `grpc::ServerBuilder` tests. Read it before touching `test/cng/`
+  or `core/protostellar/`.
+- [core/logger/redaction.hxx](../core/logger/redaction.hxx) (and
+  `core/document_id_redaction.hxx` for `document_id`): `CB_LOG_*` redaction
+  categories, list wrappers, and `not_sensitive()` / `not_redacted()`.
 
-Key CMake options:
-- `COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON` — use bundled BoringSSL (preferred)
-- `COUCHBASE_CXX_CLIENT_BUILD_TESTS=ON` — build test binaries
-- `COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON` — build examples
+## Scope and verification
 
-Dependencies are managed via `cmake/ThirdPartyDependencies.cmake` and fetched
-automatically by CMake (Asio, GSL, nlohmann/json, BoringSSL/OpenSSL).
+### For code review
 
-## Code style and formatting
+- **Abstain from nitpicking and scope expansion.** Review only defects
+  introduced or exposed by the diff. Do not suggest refactoring surrounding
+  code, splitting existing functions, renaming untouched identifiers, cleaning
+  up pre-existing code, or widening the feature or API scope of the change.
+- **Leave style and mechanical checks to CI.** `.github/workflows/linters.yml`
+  and `.github/workflows/abi.yml` already run `check-clang-format` (100 columns
+  for C++ in `.clang-format`; `.cmake-format.yaml` sets 120 for CMake),
+  `check-clang-tidy`, `check-clang-static-analyzer`, `check-cppcheck`,
+  `check-log-annotations`, `check-export-map`, `check-action-pins.rb`, and
+  `check-abi`. Do not count line columns, police include sorting or whitespace,
+  argue over naming taste, or flag numeric literals as "magic numbers".
+- **Every suggested change requires a minimal reproducer and a test design.**
+  Whenever you report a defect or suggest a code, build, or packaging change,
+  include both:
+  1. **Minimal reproducer**: the concrete input, wire frame, configuration,
+     error sequence, thread interleaving, or build/install command that fails
+     against the diff as written.
+  2. **Acceptance and verification test**: a test design following
+     `test/README.md` that names the venue (unit test, in-process recording
+     server, or real cluster; or the exact build/packaging check), sets the
+     preconditions, performs the action, and asserts the distinguishing
+     postcondition so the check fails before the suggested change and passes
+     after it.
 
-- File extensions: for new Couchbase C++ client code, prefer headers `.hxx` and sources `.cxx`. Existing C-style or third_party headers may use `.h`, and should not be renamed just to match this convention. Avoid `.cpp` for new sources.
-- `clang-format` with `IndentWidth: 2`, `ColumnLimit: 100`, `Standard: c++17`.
-- Run `bin/check-clang-format` to verify. Apply with `clang-format -i <file>`.
-- Run `bin/check-clang-tidy` for linting, and `bin/check-log-annotations` after touching any
-  `CB_LOG_*` statement.
-- All identifiers: `snake_case`. Template type parameters: `PascalCase`.
-- Internal headers use `"..."`, system/external headers use `<...>`.
-- No `#include <iostream>` or `#include <cstdio>` in non-test production code.
-- No duplicate `#include` directives in the same translation unit.
+  A comment or pull-request description that contradicts the code is the one
+  exception, and must quote both the prose and the contradicting code. If you
+  cannot state a concrete failure and a falsifiable check, abstain from posting
+  the comment.
 
-## Project layout
+### For coding and fixing agents
 
-```
-couchbase/                      Public API — headers (.hxx) only. No core/ types exposed here.
-core/                           Internal implementation (.hxx + .cxx). Selected subdirectories:
-  io/                           MCBP and HTTP session/IO layer (Asio-based).
-  mcbp/                         MCBP protocol codec and queue.
-  protocol/                     MCBP wire types.
-  protostellar/                 couchbase2:// (gRPC) transport and generated stubs.
-  operations/ management/       Request/response types; management operations.
-  transactions/                 Distributed transactions.
-  topology/ sasl/ crypto/       Cluster map, authentication, TLS/crypto helpers.
-  tracing/ metrics/ logger/     Observability.
-  impl/                         Misc internal helpers (DNS SRV, retry, etc.).
-  error_context/                Error context structs per operation type.
-  utils/ platform/ meta/        Small shared utilities.
-core/cluster.cxx                cluster / cluster_impl (pimpl) — connection lifecycle.
-core/bucket.cxx                 bucket / bucket_impl — per-bucket KV routing.
-core/crud_component.cxx         New KV operations (get, upsert, replace, …).
-core/collections_component.cxx  CID resolution and dispatch.
-core/response_handler.hxx       Interface for handling MCBP responses.
-test/                           Integration + unit tests (Catch2).
-test/framework/                 Hand-rolled test harness, NOT Catch2.
-test/cng/                       couchbase2:// tests — built on test/framework/.
-                                See test/cng/README.md.
-tools/                          cbc CLI, fit_performer, system_metrics.
-cmake/                          Build and packaging: dependency resolution, the RPM spec,
-                                debian/ and APKBUILD templates, tarball_glob.txt. CI runs
-                                the configure half of it, none of the packaging half —
-                                see the packaging section below.
-examples/                       Usage samples.
-docs/                           Doxygen input and prose documentation.
-bin/                            Helper scripts (check-clang-format, check-clang-tidy, …).
-third_party/                    Bundled/fetched dependencies.
-.clang-format                   C++ formatting rules (ColumnLimit: 100).
-.cmake-format.yaml              CMake formatting rules (line_width: 120).
-.clang-tidy                     Lint rules.
-CPPLINT.cfg                     cpplint configuration.
-```
+- **Write a minimal reproducer first and watch it fail.** Every bug fix or
+  behavioural change needs an acceptance and verification test in
+  `test/framework/` following `test/README.md`. Build and watch the named
+  assertion fail against the unpatched code (or revert the fix as a negative
+  control and confirm the control build compiled and failed). State how the
+  assertion was observed failing in the commit or pull-request description.
+- **Keep fixes minimal; do not expand scope.** Change only what is needed to
+  fix the stated issue and pass its test. Do not refactor adjacent functions,
+  rename unrelated symbols, touch callers outside the causal path, or widen
+  scope because a review comment hinted at broader cleanup. When a review
+  comment is out of scope, speculative, or already handled, answer with concrete
+  evidence from the tree rather than making unrelated edits.
+- **Run local checks.** Format touched C++ files with `clang-format -i`, run
+  `./bin/check-log-annotations` when touching `CB_LOG_*` lines, and run
+  `CB_TIDY_DIFF_BASE=origin/main ./bin/check-clang-tidy` when modifying library
+  C++ sources.
 
 ## Architecture rules
 
 **Public/private separation**: `couchbase/` headers must never include `core/`
-headers or expose Asio/BoringSSL/tl::expected types that are not part of the
-intentional public API.
+headers or expose Asio, BoringSSL, or `tl::expected` types that are not part of
+the intentional public API checked by `bin/check-export-map`.
 
 **Pimpl pattern**: `cluster`, `bucket`, and similar heavyweight objects own a
 `*_impl` class. New state belongs in `*_impl`, not in the outer class.
@@ -87,311 +90,130 @@ production paths.
 
 **KV routing**: New KV operations go in `core/crud_component.cxx` and dispatch
 via `collections_component::dispatch` using `mcbp::queue_request`. Do not add
-new operations to the legacy `mcbp_command<>` template path.
+new operations to the legacy `operations::mcbp_command<>` template path.
 
-**Error handling**: Use `std::error_code` or `tl::expected<T, std::error_code>`.
-No exceptions in the public API surface (`couchbase/`). Internal `core/` code may use
-exceptions where already accepted. `key_value_error_context` must be fully populated
-before invoking callbacks.
+**Error handling**: Use `std::error_code` or `tl::expected<T, std::error_code>`
+(`[[nodiscard]]`). No exceptions on the public API surface (`couchbase/`).
+`key_value_error_context` must be populated before invoking callbacks.
 
-**Tracing**: Every operation dispatched via `direct_dispatch`/`direct_re_queue`
-must create and close a dispatch span via `bucket_impl::create_dispatch_span` /
-`close_dispatch_span`.
-
-**Timeouts**: Idempotent operations use `errc::common::unambiguous_timeout`;
-non-idempotent use `errc::common::ambiguous_timeout`. Determined via
-`queue_request::idempotent()`.
+**Tracing and timeouts**: Every dispatched request must close its dispatch and
+request spans on every completion path, including cancellations and early
+errors. Idempotent requests (and non-idempotent requests never sent over the
+wire) report `errc::common::unambiguous_timeout`; in-flight non-idempotent
+requests report `errc::common::ambiguous_timeout` (see
+`mcbp::queue_request::idempotent()`).
 
 **Collection IDs**: On `unknown_collection` status, call
 `collections_component::handle_collection_unknown` before falling back to
 `retry_reason::key_value_collection_outdated`.
 
-**Log redaction**: A sensitive value passed to `CB_LOG_*` is wrapped in a helper from
-`core/logger/redaction.hxx`, so an external tool can strip or hash it: `logger::user_data()`
-for document keys and bodies, usernames, query statements and xattrs, `logger::metadata()` for
-bucket, scope, collection, index and design document names, `logger::system_data()` for
-hostnames, addresses, ports and DNS topology. A document id uses `logger::document()`, which
-splits the categories itself, and a container uses `logger::user_data_list()`,
-`logger::metadata_list()` or `logger::system_data_list()`, which tag one entry at a time so an entry
-still matches the same value logged on its own elsewhere; pass `logger::list_entries::quoted` where
-the line already renders each entry in double quotes, because the tag belongs inside them. Wrapping
-never changes the output unless redaction is enabled.
-Compose a value into one tag only where the composed form is what appears in other log lines:
-host and port do, a scope and collection do not. `bin/check-log-annotations` reports arguments
-whose names look sensitive and are unwrapped; it reads names, not types, so when it is wrong the
-argument gets `logger::not_sensitive()`, and a value that is sensitive but deliberately logged
-untagged gets `logger::not_redacted()` plus a comment saying why.
-
-## Testing
-
-Most tests require a running Couchbase cluster. Set up the environment:
-
-```bash
-export TEST_CONNECTION_STRING=$(cbdinocluster connstr \
-  $(cbdinocluster ps --json 2>/dev/null | jq -r .[0].id) 2>/dev/null)
-export TEST_USERNAME=Administrator
-export TEST_PASSWORD=password
-export TEST_BUCKET=default
-```
-
-Run a single test binary:
-
-```bash
-# Build and run one suite
-(cd build && cmake --build . --target test/test_integration_crud_component \
-  && ./test/test_integration_crud_component)
-
-# Run a single test case
-(cd build && ./test/test_integration_crud_component "integration: upsert")
-
-# List all test cases in a suite
-./build/test/test_integration_crud_component --list-tests
-```
-
-Run all test suites:
-
-```bash
-(cd build; find test -maxdepth 1 -type f -name 'test_*' -executable -print0 | \
-  while IFS= read -r -d '' i; do
-    cmake --build . --target "$i"
-    "$i"
-  done)
-```
-
-Every new KV operation added to `crud_component` must have a corresponding test
-in `test/test_integration_crud_component.cxx`.
-
-**`test/README.md` is the standard a test is written and reviewed against**, and
-is not restated here: what a test is for, watching an assertion fail before
-trusting it, choosing a venue that can distinguish the failure, requirements
-rather than skip guards, and the reviewer's checklist. New tests use the
-hand-rolled framework in `test/framework/`, not Catch2, which is being removed
-(CXXCBC-945).
-
-### couchbase2:// (CNG) tests
-
-`test/cng/` is a second suite with its own conventions, and the commands above do
-not apply to it. It uses the hand-rolled harness in `test/framework/` rather
-than Catch2, is gated by `COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS`, and runs under
-ctest with the `cng` label. Each case declares whether it needs a cluster;
-cluster-only cases skip (exit 77) when `TEST_CONNECTION_STRING` is unset.
-
-**`test/cng/README.md` is the reference, and its setup is not a Couchbase cluster
-in a container.** A `couchbase2://` endpoint is served by the Cloud Native
-Gateway, which is deployed by the Couchbase Autonomous Operator and therefore
-needs Kubernetes: k3d for a local cluster, then `cbdinocluster` with the `cao`
-deployer. Consult that document before assuming how these tests are run or
-proposing changes to them; several of its constraints are not guessable from the
-code, among them that the gateway is only deployed when the cluster definition
-carries `cao.gateway-version`, that release versions must be used because a
-version with a build number resolves to an image needing an organization token,
-that the operator reconciles service memory quotas away unless the
-`CouchbaseCluster` resource itself is patched, and that a local gateway needs
-`tls_verify=none` because its certificate cannot be chained.
-
-## Common defects to flag in code review
-
-1. `#include <iostream>` / `#include <cstdio>` in non-test `.cxx` files.
-2. Duplicate `#include` in the same file.
-3. A line over the limit **for its language**: 100 columns for C++ (`.clang-format`,
-   `ColumnLimit: 100`), 120 for CMake (`.cmake-format.yaml`, `line_width: 120`).
-   Applying the C++ limit to `.cmake`, `CMakeLists.txt` or `cmake/*.txt` produces
-   findings the project does not want. Count the columns before reporting one.
-4. Single-argument constructors without `explicit`.
-5. Accessing an object after `std::move` in the same scope.
-6. Magic numeric literals in production paths without a named constant.
-7. `tl::expected<…>` or `std::error_code` return values without `[[nodiscard]]`.
-8. Adding parameters to pure virtual methods without an ABI-impact comment.
-9. `std::set<retry_reason>` in hot-path structs (allocates; prefer flat vector).
-10. `std::this_thread::sleep_for` in integration tests.
-11. Planning/notes files (`REFACTORING_PLAN.md`, AI-convention files like
-    `GEMINI.md`) committed to the repo.
-12. `core/` types or Asio headers exposed in `couchbase/` public headers.
-13. A comment that contradicts the code beneath it — a stale comment is a false
-    specification, not a cosmetic issue. See the documentation lens below.
-14. A test that cannot fail. See the test lens below.
+**Source rules**: Internal headers use `"..."`, system and external headers use
+`<...>`. No `#include <iostream>` or `#include <cstdio>` in non-test production
+code. Never commit planning, scratch, or AI-convention files (`PLAN.md`,
+`GEMINI.md`, `AGENTS.md`, etc.) to the repository.
 
 ## Reviewing the build and packaging code
 
-**Review CMake changes to the same standard as C++ changes.** A defect here costs
-more than one in a `.cxx`, because it can stop every build at once rather than one
-code path — as a failed `cmake/CPM.cmake` download does, taking out every job that
-configures.
+Review CMake changes to the same standard as C++ changes. A defect here stops
+every build at once rather than one code path.
 
-CI covers this code unevenly, and the split is what decides how much weight a
-finding carries:
+CI covers this code unevenly, and the split decides how much weight a finding
+carries:
 
-- **Exercised on every job**: everything the configure step runs — dependency
-  resolution in `cmake/ThirdPartyDependencies.cmake`, `cmake/GrpcProtobuf.cmake`,
-  `cmake/CPM.cmake`, compiler and warning options, and the whole target graph.
-  A mistake here is usually caught, and caught loudly.
-- **Not exercised anywhere**: the install and packaging half. No workflow sets
-  `COUCHBASE_CXX_CLIENT_INSTALL`, so no CI leg runs the `install()` rules,
-  `bundle_static_library`, the licence installs, or any package build, and none
-  uses the RPM spec, `cmake/debian/`, `cmake/APKBUILD.in` or
-  `cmake/tarball_glob.txt`. Green CI says nothing about any of it. Review is the
-  only gate before a release build, so weigh findings there accordingly.
+- **Exercised on pull requests**: the configure and build graph
+  (`cmake/ThirdPartyDependencies.cmake`, `cmake/GrpcProtobuf.cmake`,
+  `cmake/CPM.cmake`, compiler and warning flags) plus `bin/check-abi` and
+  `bin/check-export-map`, which build the shared library with
+  `COUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON` (`BUILD_STATIC=OFF`,
+  `BUILD_COUCHBASE2=OFF`).
+- **Not exercised in CI**: `COUCHBASE_CXX_CLIENT_INSTALL`, `install()` rules,
+  `bundle_static_library`, `COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2` packaging,
+  licence installs, RPM/Debian/APK package builds (`cmake/debian/`,
+  `cmake/APKBUILD.in`), and `cmake/tarball_glob.txt`. Green CI says nothing
+  about any of it.
 
-What has actually broken here, and is worth checking on any change:
+What has broken here, and is worth checking on relevant diffs:
 
-- **The source tarball is filtered by patterns, and a missing file is only found
-  at install time.** `cmake/tarball_glob.txt` decides what enters the tarball the
-  packages build from. Vendored dependencies install *before* this project does,
-  so one file a dependency's own `install()` reads and the tarball omits stops the
-  whole `%install`/`dh_auto_install` step, after the entire vendored stack has
-  compiled. When a dependency is added or bumped, check what its install rules
-  read from its source tree, not just what gets linked.
-- **The patterns are `find -wholename`, not shell globs.** `**/` still requires an
-  intervening path segment, so a `**/` pattern **cannot match a file at the root
-  of a tree**; write both the root and nested spellings. Suffixes are literal:
-  `*.cmake.in` does not match `zconf.h.cmakein`.
-- **That file is read by `xargs`, whose quote handling is disabled deliberately.**
-  The read passes `-d "\n"`; without it an apostrophe anywhere in the file —
-  including in a comment — aborts `xargs` and silently drops every pattern after
-  that line, while the pipeline still exits 0 and the tarball target reports
-  success. Apostrophes are therefore fine; removing the delimiter is not. Flag any
-  change that drops `-d` from those `xargs` invocations in `cmake/Packaging.cmake`,
-  or that adds a new pattern-file read without it.
-- **A backslash argument inside `add_custom_command` needs four backslashes**
-  (`"\\\\n"`): CMake collapses them once and the shell ninja runs the command in
-  collapses them again. Two backslashes silently arrive as a bare letter.
-- **Tri-state options must be matched with `STREQUAL` before any boolean test.**
-  `if(<var>)` is true for every string CMake does not read as false, so an
-  unrecognised or misspelt value takes the ON branch. See
-  `COUCHBASE_CXX_CLIENT_SYSTEM_GRPC` in `cmake/GrpcProtobuf.cmake`.
-- **Visibility on vendored libraries is not cosmetic.** Hiding gRPC's symbols in a
-  build that links both the shared client and a stub library gives the process two
-  gRPCs, two `ExecCtx` thread-locals, and a crash inside gRPC's own closure list.
-- **A licence notice must ship for every dependency compiled into an artefact**,
-  and only for those actually built: the installs in `cmake/Packaging.cmake` are
-  conditional on the option that built the code. A package that gains a vendored
-  dependency and not its notice is a licensing defect, not a nit.
-- **dpkg and rpm differ on co-owned files.** rpm reference-counts an identical
-  path owned by several subpackages; dpkg refuses it outright. Notices shared
-  between Debian binary packages need a per-package copy via `dh_install`
-  source/dest pairs.
+- **Source tarball filtering (`cmake/tarball_glob.txt`)**: decides what enters
+  the release source tarball, and omissions only fail at `%install` /
+  `dh_auto_install` time after the vendored stack compiles. When a dependency is
+  added or bumped, check what its `install()` rules read from its source tree.
+- **`find -wholename` patterns, not shell globs**: `**/` requires at least one
+  intervening path segment and cannot match a file at the root of a tree; write
+  both root and nested spellings. Suffixes are literal (`*.cmake.in` does not
+  match `zconf.h.cmakein`).
+- **`xargs -d "\\\\n"` in `cmake/Packaging.cmake`**: disables `xargs` quote
+  parsing so an apostrophe in `tarball_glob.txt` (including in a comment) does
+  not abort `xargs` and silently drop later patterns while the pipeline still
+  exits 0. Four backslashes are required inside `add_custom_command` because
+  CMake and the shell each collapse them once. Flag any change that drops `-d`
+  or adds a pattern-file read without it.
+- **Tri-state CMake options**: match with `STREQUAL` before any boolean
+  `if(<var>)` test, because `if(<var>)` treats any unrecognised string as true
+  (see `COUCHBASE_CXX_CLIENT_SYSTEM_GRPC` in `cmake/GrpcProtobuf.cmake`).
+- **Vendored library visibility**: hiding gRPC's symbols in a build linking both
+  the shared client and a stub library gives the process two gRPC instances, two
+  `ExecCtx` thread-locals, and a crash inside gRPC's closure list.
+- **Licence notices and co-owned paths**: `cmake/Packaging.cmake` must install a
+  licence notice for every dependency compiled into an artefact, gated on the
+  option that built it. `rpm` reference-counts identical paths across
+  subpackages, whereas `dpkg` rejects them; shared notices across Debian binary
+  packages need per-package copies via `dh_install` source/dest pairs.
 
 ## Review the same diff from several angles
 
-This is a low-level C++ library: a single change is usually correct from one
-viewpoint and wrong from another, and a reviewer who reads it once, linearly,
-finds only the defects that viewpoint exposes. Pass over the diff several times,
-each time as a different specialist, and say which concern produced a finding.
-Not every lens applies to every change; skip the ones that do not, and spend the
-effort on those that do.
+Pass over the diff for the specialist concerns that apply to it, skip those that
+do not, and name the concern that produced each finding:
 
-**API and ABI steward.** Does a public header in `couchbase/` leak a `core/`
-type, Asio, BoringSSL or `tl::expected` beyond the intentional surface? Does new
-state belong in `*_impl` rather than the outer class? Does a signature, a virtual
-method, or a struct layout change break users who compiled against the previous
-release?
-
-**Concurrency and lifetime.** Every KV and network path is asynchronous. Who owns
-the object the completion handler touches, and can it die first? Is captured
-state still alive when the callback runs? Can the handler run twice, or never, on
-an error path? Is anything shared between an Asio thread and the caller without
-synchronisation? A `shared_ptr` captured into a handler that the same object owns
-is a cycle.
-
-**Memory.** Dangling `string_view`/`span` into a buffer that has been reused or
-freed; use after `std::move`; a reference captured by `&` in a lambda that
-outlives the frame; an index or size computed from an untrusted length.
-
-**Wire protocol.** Encoding and decoding are where silent corruption lives:
-endianness, truncation, a field written with the wrong width, a partial read
-treated as complete, an extras/key/value framing mistake. For protobuf, a
-non-optional proto3 scalar cannot distinguish "absent" from "default" — code that
-needs the distinction must track arrival explicitly.
-
-**Errors and observability.** Is the error context fully populated before the
-callback runs? Is a failure swallowed, or converted into a success? Is the
-idempotent/non-idempotent timeout distinction right? Is the dispatch span closed
-on every path, including the error ones? Silent fallbacks that hide a failure are
-worse than the failure.
-
-**Performance.** Allocations and copies on the hot path; a container chosen for
-convenience in a per-operation struct; a `shared_ptr` copied where a reference
-would do; work done under a lock that need not be.
-
-**Portability.** The project builds with GCC, Clang and MSVC, on Linux, macOS and
-Windows, x86-64 and aarch64. Warnings differ sharply between them, and a warning
-that only Clang emits still fails every macOS and Windows leg — a `class`/`struct`
-mismatch is the recurring example. Sanitizer builds are their own configuration:
-flags applied per target are an ODR hazard when a type's layout depends on them.
-
-**Security.** Certificate verification and TLS options; credentials or tokens
-reaching a log; buffer arithmetic on attacker-controlled lengths.
-
-**Documentation and prose.** Every English sentence attached to the change has to
-describe what the code does, at every level: the comment above a line, the
-docstring on a public method, the file's header comment, `docs/`, the commit
-message, and the pull request body. They drift independently and nothing compares
-them, so each is checked against the diff separately.
-
-A comment that contradicts the code beneath it is a defect of the same
-seriousness as a wrong condition: it is a specification, and the next person
-changes the code to match it. Re-read the check before accepting the sentence
-above it. The same applies to a comment that lists what something handles when the
-list has grown, and to a commit message or PR body that claims behaviour the diff
-does not implement — that text is what people read years later, and it is the
-only record that is never re-run.
-
-Comments carry the contract and the reason, not a narration of the code or of how
-the change came about. Prefer deleting a comment to keeping one that will drift.
-Readability is part of correctness here: a name that misdescribes what a variable
-holds, or a function that has quietly grown a second responsibility, costs every
-future reader and is worth raising.
-
-**Tests.** Tests specify correct behaviour; they do not record current
-behaviour, and they must not lock in a bug or an internal detail that is free to
-change.
-
-The litmus test for any test added alongside a fix: **could this test have caught
-the bug being fixed?** If not, it is not pulling its weight. The order that
-produces such a test is to decide what correct behaviour is, assert that, watch
-it **fail** against the current or missing code, and only then implement. A test
-that passes the moment it is written, with no change to the code, has demonstrated
-nothing — it should be deleted or rewritten, not kept for the count.
-
-So, when reviewing tests, ask what would have to break for this to fail, and
-flag it when the answer is "nothing":
-
-- an assertion on a value the code under test also produced
-- a skip predicate that can never be false, so a live case cannot fail
-- a check of an internal representation rather than the observable contract,
-  which fails on refactoring and passes on regression
-- a fixed `sleep_for` standing in for a condition
-- setup that leaves preconditions implicit, so the case passes for a reason
-  other than the one it names — state the preconditions and assert the
-  postconditions in full, including what must *not* have changed
+- **API and ABI**: public headers in `couchbase/` leaking `core/` or internal
+  types; state placed on an outer class instead of `*_impl`; signature, virtual
+  method, or struct layout changes breaking ABI compatibility.
+- **Concurrency and lifetime**: ownership of objects touched by async completion
+  handlers; captured state outliving its owner; handlers running twice or never
+  on error/cancel paths; unsynchronised sharing between Asio threads and
+  callers; `shared_ptr` cycles between an object and a handler it stores.
+- **Memory**: dangling `string_view` or `span` into reused/freed buffers; use
+  after `std::move`; `&`-captures outliving the stack frame; index or size
+  arithmetic on untrusted lengths.
+- **Wire protocol**: endianness, width truncation, partial reads treated as
+  complete, MCBP framing mistakes, and non-optional proto3 scalars where absent
+  must be distinguished from default.
+- **Errors and observability**: error contexts populated before callbacks run;
+  swallowed failures; timeout ambiguity classification; dispatch spans closed on
+  every path including errors.
+- **Performance**: avoidable allocations or copies on per-operation hot paths
+  (such as `std::set<retry_reason>` where a flat vector suffices); work held
+  under a lock unnecessarily.
+- **Portability**: GCC, Clang, and MSVC across Linux, macOS, and Windows on
+  `x86-64` and `aarch64` (`class`/`struct` forward-declaration mismatches fail
+  Clang/MSVC builds; per-target sanitizer flags risk ODR layout mismatches).
+- **Security**: TLS certificate verification options, credentials or tokens
+  reaching logs, and unchecked arithmetic on network-supplied lengths.
+- **False specifications in comments and prose**: a comment, docstring, commit
+  message, or pull-request body that contradicts what the diff actually
+  implements. Flag direct contradictions between prose and code; do not critique
+  prose style or ask for narrative comments.
+- **Tests**: check test diffs against `test/README.md`: above all, ask what
+  would have to break in production code for the assertion to fail, and flag
+  tests whose answer is "nothing".
 
 ## What makes a review finding useful here
 
-- **Verify the premise before reporting.** Several findings in this repository
-  have been declined because the rule cited did not exist (a limit that is 120 and
-  not 100), because the file was never compiled, or because the claimed mechanism
-  did not occur when run. A finding that names a rule should name where the rule is
-  configured.
-- **A path that appears only as a deletion is usually a rename.** This repository
-  moves test files in bulk, so a diff frequently shows the old location removed
-  while the addition sits in a hunk the review did not read. Before reporting that
-  a build file names a source that does not exist, check the path against the
-  branch rather than against the diff. Eight findings in one series of pull
-  requests claimed a CMake target referenced missing framework sources; the files
-  were present, the old directory was gone, and every commit configured, built and
-  ran its tests.
-- **State a concrete failure**: the input or configuration, and what goes wrong.
-  "This could be a problem" cannot be actioned or refuted. A finding that predicts
-  a specific behaviour is valuable even when it turns out to be wrong, because it
-  can be tested.
-- **Prefer the root cause to the instance.** If the same mistake appears at five
-  call sites, say so once and name the shared cause; five separate comments on one
-  cause read as five problems.
-- **Suppressed findings are still findings.** Anything placed in a collapsed
-  block is read and answered like the rest, so it is worth the same care.
+- **Verify the premise before reporting.** Check where a cited rule is actually
+  configured, whether the file is compiled, and whether the claimed failure path
+  can happen.
+- **A path that appears only as a deletion is usually a rename.** Test and
+  framework files move in bulk; check paths against the branch rather than the
+  diff hunk before reporting missing sources or targets.
+- **State a concrete failure, reproducer, and test.** "This could be a problem"
+  cannot be actioned or refuted. Pair every finding with its minimal reproducer
+  and verification test design as required above.
+- **Prefer the root cause to the instance.** If one mistake appears at five call
+  sites, report the shared cause once rather than leaving five comments.
+- **Suppressed findings are still findings.** Collapsed blocks are read and
+  answered like the rest; do not use them to bypass the no-nitpick rule or the
+  reproducer and test requirement.
 - **Do not repeat a declined finding without new evidence.** A finding answered
-  with a measurement is closed; raising it again unchanged costs a round and
-  produces the same answer.
-- **The change may already do what is asked.** Re-read the current diff before
-  reporting; a review of an earlier revision produces findings the code has
-  already addressed.
+  with a measurement or code trace is closed unless new facts contradict it.
+- **Re-read the current diff.** Check the latest revision before posting so you
+  do not ask for something the change already implements.
