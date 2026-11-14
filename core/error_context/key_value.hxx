@@ -85,6 +85,9 @@ make_key_value_error_context(std::error_code ec,
   std::optional<key_value_error_map_info> error_map_info{};
   if (status_code != 0xffffU) {
     status = response.status();
+    if (!ec && response.error_code()) {
+      ec = response.error_code();
+    }
     if (command->session_ && status_code > 0) {
       error_map_info = command->session_->decode_error_code(status_code);
     }

@@ -36,6 +36,9 @@ get_request::make_response(key_value_error_context&& ctx,
                            const encoded_response_type& encoded) const -> get_response
 {
   get_response response{ std::move(ctx) };
+  if (!response.ctx.ec() && encoded.error_code()) {
+    response.ctx.override_ec(encoded.error_code());
+  }
   if (!response.ctx.ec()) {
     response.value = encoded.body().value();
     response.cas = encoded.cas();

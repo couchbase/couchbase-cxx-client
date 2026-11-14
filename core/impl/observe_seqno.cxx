@@ -37,6 +37,9 @@ observe_seqno_request::make_response(key_value_error_context&& ctx,
   -> observe_seqno_response
 {
   observe_seqno_response response{ std::move(ctx), active };
+  if (!response.ctx.ec() && encoded.error_code()) {
+    response.ctx.override_ec(encoded.error_code());
+  }
   if (!response.ctx.ec()) {
     response.partition = encoded.body().partition_id();
     response.partition_uuid = encoded.body().partition_uuid();

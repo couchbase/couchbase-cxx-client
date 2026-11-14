@@ -384,7 +384,7 @@ class mcbp_session_impl
           switch (auto opcode = static_cast<protocol::client_opcode>(msg.header.opcode)) {
             case protocol::client_opcode::hello: {
               protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 {
                   const std::scoped_lock lock(session_->session_info_mutex_);
                   session_->supported_features_ = resp.body().supported_features();
@@ -413,7 +413,7 @@ class mcbp_session_impl
             case protocol::client_opcode::sasl_list_mechs: {
               const protocol::client_response<protocol::sasl_list_mechs_response_body> resp(
                 std::move(msg));
-              if (resp.status() != key_value_status_code::success) {
+              if (resp.status() != key_value_status_code::success || resp.error_code()) {
                 auto error_msg = fmt::format(
                   "unexpected message status during bootstrap: {} (opaque={}, context={})",
                   resp.error_message(),
@@ -429,10 +429,10 @@ class mcbp_session_impl
             } break;
             case protocol::client_opcode::sasl_auth: {
               protocol::client_response<protocol::sasl_auth_response_body> resp(std::move(msg));
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 return auth_success();
               }
-              if (resp.status() == key_value_status_code::auth_continue) {
+              if (resp.status() == key_value_status_code::auth_continue && !resp.error_code()) {
                 auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
                 if (sasl_code == sasl::error::OK) {
                   return auth_success();
@@ -474,7 +474,7 @@ class mcbp_session_impl
             case protocol::client_opcode::sasl_step: {
               const protocol::client_response<protocol::sasl_step_response_body> resp(
                 std::move(msg));
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 return auth_success();
               }
               auto error_msg =
@@ -492,7 +492,7 @@ class mcbp_session_impl
             }
             case protocol::client_opcode::get_error_map: {
               protocol::client_response<protocol::get_error_map_response_body> resp(std::move(msg));
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 session_->error_map_.emplace(resp.body().errmap());
               } else {
                 auto error_msg =
@@ -510,7 +510,7 @@ class mcbp_session_impl
             } break;
             case protocol::client_opcode::select_bucket: {
               protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 CB_LOG_DEBUG("{} selected bucket: {}",
                              session_->log_prefix_,
                              logger::metadata(session_->bucket_name_.value_or("")));
@@ -571,7 +571,7 @@ class mcbp_session_impl
                                logger::not_redacted(text.value()));
                 }
               }
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 if (!resp.body().config_text().has_value()) {
                   return complete(errc::network::protocol_error);
                 }
@@ -748,7 +748,7 @@ class mcbp_session_impl
                                logger::not_redacted(text.value()));
                 }
               }
-              if (resp.status() == key_value_status_code::success) {
+              if (resp.status() == key_value_status_code::success && !resp.error_code()) {
                 if (session_ && resp.body().config_text().has_value()) {
                   session_->update_configuration(resp.body().config());
                 }

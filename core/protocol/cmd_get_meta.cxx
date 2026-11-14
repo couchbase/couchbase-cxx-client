@@ -29,13 +29,19 @@ auto
 get_meta_response_body::parse(key_value_status_code status,
                               const header_buffer& header,
                               std::uint8_t framing_extras_size,
-                              std::uint16_t /* key_size */,
+                              std::uint16_t key_size,
                               std::uint8_t extras_size,
                               const std::vector<std::byte>& body,
                               const cmd_info& /* info */) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
     std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
     if (extras_size == sizeof(deleted_) + sizeof(flags_) + sizeof(expiry_) +
                          sizeof(sequence_number_) + sizeof(datatype_)) {
@@ -56,8 +62,8 @@ get_meta_response_body::parse(key_value_status_code status,
       offset += 8;
 
       datatype_ = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]);
+      return true;
     }
-    return true;
   }
   return false;
 }

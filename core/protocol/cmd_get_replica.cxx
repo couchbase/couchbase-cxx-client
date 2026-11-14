@@ -42,6 +42,12 @@ get_replica_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
     std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
     if (extras_size == 4) {
       memcpy(&flags_, body.data() + offset, sizeof(flags_));

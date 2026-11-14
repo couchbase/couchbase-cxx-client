@@ -85,7 +85,7 @@ mutate_in_request::make_response(key_value_error_context&& ctx,
   couchbase::cas response_cas{};
   couchbase::mutation_token response_token{};
   std::vector<mutate_in_response::entry> fields{};
-  std::error_code ec = ctx.ec();
+  std::error_code ec = ctx.ec() ? ctx.ec() : encoded.error_code();
   std::optional<std::size_t> first_error_index{};
   std::optional<std::string> first_error_path{};
 
@@ -93,27 +93,74 @@ mutate_in_request::make_response(key_value_error_context&& ctx,
       encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
     deleted = true;
   }
-  if (!ctx.ec()) {
-    fields.resize(specs.size());
-    fields.resize(specs.size());
-    for (size_t i = 0; i < specs.size(); ++i) {
-      const auto& req_entry = specs[i];
-      fields[i].original_index = req_entry.original_index_;
-      fields[i].path = req_entry.path_;
-      fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
-      fields[i].status = key_value_status_code::success;
+  if (!ec) {
+    const bool multi_path_failure =
+      encoded.status() == key_value_status_code::subdoc_multi_path_failure ||
+      encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted;
+    const bool success_status = encoded.status() == key_value_status_code::success ||
+                                encoded.status() == key_value_status_code::subdoc_success_deleted;
+
+    std::vector<bool> seen(specs.size(), false);
+    if ((!multi_path_failure && !success_status) ||
+        (multi_path_failure && encoded.body().fields().size() != 1)) {
+      ec = errc::network::protocol_error;
+    } else {
+      for (const auto& entry : encoded.body().fields()) {
+        if (entry.index >= specs.size() || seen[entry.index]) {
+          ec = errc::network::protocol_error;
+          break;
+        }
+        seen[entry.index] = true;
+      }
     }
-    for (const auto& entry : encoded.body().fields()) {
-      if (entry.status == key_value_status_code::success) {
-        fields[entry.index].value = utils::to_binary(entry.value);
-      } else {
-        first_error_index = entry.index;
-        first_error_path = fields[entry.index].path;
-        fields[entry.index].status = entry.status;
-        fields[entry.index].ec = protocol::map_status_code(
+
+    if (!ec) {
+      fields.resize(specs.size());
+      for (size_t i = 0; i < specs.size(); ++i) {
+        const auto& req_entry = specs[i];
+        fields[i].original_index = req_entry.original_index_;
+        fields[i].path = req_entry.path_;
+        fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+        fields[i].status = key_value_status_code::success;
+      }
+
+      if (multi_path_failure) {
+        const auto& entry = encoded.body().fields().front();
+        const bool entry_succeeded = entry.status == key_value_status_code::success ||
+                                     entry.status == key_value_status_code::subdoc_success_deleted;
+        const auto entry_ec = protocol::map_status_code(
           protocol::client_opcode::subdoc_multi_mutation, static_cast<std::uint16_t>(entry.status));
-        ec = fields[entry.index].ec;
-        break;
+        if (entry_succeeded || !entry_ec || entry_ec == errc::network::protocol_error) {
+          ec = errc::network::protocol_error;
+          fields.clear();
+        } else {
+          first_error_index = fields[entry.index].original_index;
+          first_error_path = fields[entry.index].path;
+          fields[entry.index].status = entry.status;
+          fields[entry.index].ec = entry_ec;
+          ec = entry_ec;
+        }
+      } else {
+        for (const auto& entry : encoded.body().fields()) {
+          if (entry.status != key_value_status_code::success &&
+              entry.status != key_value_status_code::subdoc_success_deleted) {
+            ec = errc::network::protocol_error;
+            fields.clear();
+            break;
+          }
+          fields[entry.index].status = entry.status;
+          fields[entry.index].value = utils::to_binary(entry.value);
+        }
+      }
+    }
+    if (!ec) {
+      for (size_t i = 0; i < fields.size(); ++i) {
+        if (fields[i].opcode == protocol::subdoc_opcode::counter &&
+            (!seen[i] || fields[i].value.empty())) {
+          ec = errc::network::protocol_error;
+          fields.clear();
+          break;
+        }
       }
     }
     if (!ec) {

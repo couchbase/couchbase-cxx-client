@@ -64,20 +64,24 @@ parse_server_duration_us(const io::mcbp_message& msg) -> double
 auto
 parse_enhanced_error(std::string_view str, key_value_extended_error_info& info) -> bool
 {
-  if (auto error = utils::json::parse(str); error.is_object()) {
-    if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {
-      std::string reference;
-      if (const auto* ref = err_obj->find("ref"); ref != nullptr && ref->is_string()) {
-        reference = ref->get_string();
-      }
-      std::string context;
-      if (const auto* ctx = err_obj->find("context"); ctx != nullptr && ctx->is_string()) {
-        context = ctx->get_string();
-      }
+  try {
+    if (auto error = utils::json::parse(str); error.is_object()) {
+      if (const auto* err_obj = error.find("error"); err_obj != nullptr && err_obj->is_object()) {
+        std::string reference;
+        if (const auto* ref = err_obj->find("ref"); ref != nullptr && ref->is_string()) {
+          reference = ref->get_string();
+        }
+        std::string context;
+        if (const auto* ctx = err_obj->find("context"); ctx != nullptr && ctx->is_string()) {
+          context = ctx->get_string();
+        }
 
-      info = key_value_extended_error_info{ reference, context };
-      return true;
+        info = key_value_extended_error_info{ reference, context };
+        return true;
+      }
     }
+  } catch (const std::exception&) {
+    return false;
   }
   return false;
 }

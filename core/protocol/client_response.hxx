@@ -33,6 +33,7 @@
 #include "magic_fmt.hxx"
 #include "status.hxx"
 #include <couchbase/cas.hxx>
+#include <couchbase/error_codes.hxx>
 
 #include <gsl/assert>
 #include <spdlog/fmt/bundled/core.h>
@@ -65,6 +66,7 @@ private:
   std::uint8_t extras_size_{ 0 };
   std::size_t body_size_{ 0 };
   key_value_status_code status_{};
+  std::error_code error_code_{};
   std::optional<key_value_extended_error_info> error_;
   std::uint32_t opaque_{};
   std::uint64_t cas_{};
@@ -114,6 +116,11 @@ public:
   [[nodiscard]] auto status() const -> key_value_status_code
   {
     return status_;
+  }
+
+  [[nodiscard]] auto error_code() const -> std::error_code
+  {
+    return error_code_;
   }
 
   [[nodiscard]] auto cas() const -> couchbase::cas
@@ -167,7 +174,9 @@ public:
     std::uint32_t field = 0;
     memcpy(&field, header_.data() + 8, sizeof(field));
     body_size_ = utils::network_to_host(field);
-    data_.resize(body_size_);
+    if (data_.size() > body_size_) {
+      data_.resize(body_size_);
+    }
 
     memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
     opaque_ = utils::network_to_host(opaque_);
@@ -193,23 +202,34 @@ public:
   void parse_body()
   {
     parse_framing_extras();
-    bool parsed =
+    error_code_ =
+      (opcode_ == client_opcode::sasl_auth && status_ == key_value_status_code::auth_continue)
+        ? std::error_code{}
+        : protocol::map_status_code(opcode_, static_cast<std::uint16_t>(status_));
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size_) +
+                                    static_cast<std::size_t>(extras_size_) +
+                                    static_cast<std::size_t>(key_size_);
+    const bool parsed =
+      data_.size() >= body_size_ && prefix_size <= body_size_ && prefix_size <= data_.size() &&
       body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
-    if (status_ != key_value_status_code::success && !parsed && has_json_datatype(data_type_)) {
-      key_value_extended_error_info err;
-      std::vector<std::uint8_t>::difference_type offset =
-        framing_extras_size_ + extras_size_ + key_size_;
-      std::string_view enhanced_error_text{ reinterpret_cast<const char*>(data_.data()) + offset,
-                                            data_.size() - static_cast<std::size_t>(offset) };
-      if (parse_enhanced_error(enhanced_error_text, err)) {
-        error_.emplace(err);
+    if (!parsed) {
+      if (!error_code_) {
+        error_code_ = errc::network::protocol_error;
+      } else if (has_json_datatype(data_type_) && prefix_size <= data_.size()) {
+        key_value_extended_error_info err;
+        std::string_view enhanced_error_text{
+          reinterpret_cast<const char*>(data_.data()) + prefix_size, data_.size() - prefix_size
+        };
+        if (parse_enhanced_error(enhanced_error_text, err)) {
+          error_.emplace(err);
+        }
       }
     }
   }
 
   void parse_framing_extras()
   {
-    if (framing_extras_size_ == 0) {
+    if (framing_extras_size_ == 0 || std::size_t{ framing_extras_size_ } > data_.size()) {
       return;
     }
     size_t offset = 0;

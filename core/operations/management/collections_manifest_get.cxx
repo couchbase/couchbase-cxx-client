@@ -35,6 +35,9 @@ collections_manifest_get_request::make_response(key_value_error_context&& ctx,
   -> collections_manifest_get_response
 {
   collections_manifest_get_response response{ std::move(ctx) };
+  if (!response.ctx.ec() && encoded.error_code()) {
+    response.ctx.override_ec(encoded.error_code());
+  }
   if (!response.ctx.ec()) {
     response.manifest = encoded.body().manifest();
   }
