@@ -47,33 +47,58 @@ target_link_libraries(minimal PRIVATE couchbase_cxx_client::couchbase_cxx_client
 
 ## Building the project
 
-This repository uses `CMake` for building, so everything should build once the
-basic development dependencies exist (C++17 compiler).
-
-### Building (command-line)
+Building requires `CMake` 3.19+ and a C++17 compiler:
 
 ```shell
 git clone https://github.com/couchbase/couchbase-cxx-client.git
 cd couchbase-cxx-client
-mkdir build
 cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
-cmake --build build
+cmake --build build --parallel
 ```
 
 ## Running tests
 
-The tests exist in the `/test` directory. Developers will add more tests and
-will organize this directory soon to differentiate between common test types
-for different testing approaches (for example, `unit tests`,
-`integration tests`, `system tests`).
-
-### Testing (command-line)
+Unit tests run standalone; integration tests connect to a running Couchbase
+Server instance configured through environment variables:
 
 ```shell
-cd build
 export TEST_CONNECTION_STRING=couchbase://127.0.0.1
 export TEST_USERNAME=Administrator
 export TEST_PASSWORD=password
 export TEST_BUCKET=default
-ctest
+
+ctest --test-dir build --output-on-failure
 ```
+
+With [cbdinocluster](https://github.com/couchbaselabs/cbdinocluster), read the
+connection string from the running cluster:
+
+```shell
+export TEST_CONNECTION_STRING=$(cbdinocluster connstr \
+  $(cbdinocluster ps --json 2>/dev/null | jq -r '.[0].id') 2>/dev/null)
+```
+
+See [test/README.md](test/README.md) for selecting test labels (`-L unit`,
+`-L integration`), running single cases, and writing new tests, and
+[test/cng/README.md](test/cng/README.md) for `couchbase2://` (Cloud Native
+Gateway) tests.
+
+## Contributing
+
+New C++ headers and sources use `.hxx` and `.cxx`; existing `.h`/`.c` and
+third-party files keep their extensions. Formatting and lint rules live in
+`.clang-format` and `.clang-tidy` (`snake_case` identifiers, `PascalCase`
+template parameters).
+
+`couchbase/` holds only public API headers and never includes `core/` headers
+or exposes internal dependencies outside the public API surface. Core I/O is
+non-blocking (Asio) and reports failures through `std::error_code` rather than
+throwing across the public API. Sensitive arguments passed to `CB_LOG_*` are
+wrapped at the log site with the helpers in
+[core/logger/redaction.hxx](core/logger/redaction.hxx); passwords, tokens, and
+private keys are never logged.
+
+Format edited files with `clang-format -i` (checked on commits by
+`./bin/check-clang-format`), run `./bin/check-log-annotations` after touching
+`CB_LOG_*` statements, and run `CB_TIDY_DIFF_BASE=origin/main ./bin/check-clang-tidy`
+when changing library C++ sources.
