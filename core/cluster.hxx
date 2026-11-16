@@ -368,6 +368,10 @@ public:
   // couchbase2 only: whether the gRPC channel is READY, asking an idle channel to connect.
   // cluster_closed once the cluster is closed, feature_not_available for any other cluster.
   [[nodiscard]] auto protostellar_channel_ready() const -> std::pair<std::error_code, bool>;
+  // couchbase2 only: whether the gRPC channel is in TRANSIENT_FAILURE, read without asking it to
+  // connect. After a successful resolution, the channel reaches that state only once its
+  // subchannels are built. False for any other cluster and once the cluster is closed.
+  [[nodiscard]] auto protostellar_channel_failed() const -> bool;
   // Calls `hook` on the io_context during close(), before close()'s handler, if `owner` is still
   // alive then. Returns false, without registering, once the cluster is stopped. open() also stops
   // it without calling hooks when the origin has no nodes, the build has no couchbase2 support, or

@@ -1321,6 +1321,14 @@ public:
         return { {}, false };
     }
   }
+
+  [[nodiscard]] auto protostellar_channel_failed() const -> bool
+  {
+    const auto component = protostellar_component();
+    return !stopped_ && component != nullptr &&
+           component->channel()->GetState(/* try_to_connect */ false) ==
+             GRPC_CHANNEL_TRANSIENT_FAILURE;
+  }
 #endif
 
   // True when the cluster was configured with a couchbase2:// connection string -- a property of
@@ -3705,6 +3713,17 @@ cluster::protostellar_channel_ready() const -> std::pair<std::error_code, bool>
   }
 #endif
   return { errc::common::feature_not_available, false };
+}
+
+auto
+cluster::protostellar_channel_failed() const -> bool
+{
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  if (impl_ && impl_->is_protostellar()) {
+    return impl_->protostellar_channel_failed();
+  }
+#endif
+  return false;
 }
 
 } // namespace couchbase::core

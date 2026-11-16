@@ -181,6 +181,21 @@ wait_until_ready_pending_at_close_is_cluster_closed([[maybe_unused]] context& ct
               "cluster.wait_until_ready() is pending before close");
   assert_true(bucket_wait.wait_for(0s) == std::future_status::timeout,
               "bucket.wait_until_ready() is pending before close");
+  // gRPC applies the channel destruction in close() only after work already queued on the channel.
+  // A resolver result already queued then builds the TLS subchannel while the process may be
+  // exiting, after OpenSSL's atexit cleanup. For this literal address, TRANSIENT_FAILURE is reached
+  // only after that result is processed, and the next resolution is at least 30s away.
+  const auto& core = couchbase::extract_core_cluster(cluster);
+  const auto settle_deadline = std::chrono::steady_clock::now() + 5s;
+  while (!core.protostellar_channel_failed() &&
+         std::chrono::steady_clock::now() < settle_deadline) {
+    std::this_thread::sleep_for(10ms);
+  }
+  assert_true(core.protostellar_channel_failed(),
+              "the channel to the unreachable gateway reaches TRANSIENT_FAILURE before close");
+  assert_true(cluster_wait.wait_for(0s) == std::future_status::timeout &&
+                bucket_wait.wait_for(0s) == std::future_status::timeout,
+              "both waits are still pending at close");
   cluster.close().get();
 
   // Both are read before asserting, so that a failure reports each wait.
