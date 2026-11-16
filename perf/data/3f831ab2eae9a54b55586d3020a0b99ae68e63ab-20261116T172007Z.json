@@ -1,0 +1,421 @@
+{
+  "sha": "3f831ab2eae9a54b55586d3020a0b99ae68e63ab",
+  "date": "2026-11-16T16:49:08Z",
+  "cpu_model": "AMD EPYC 7763 64-Core Processor",
+  "rows": {
+    "json_generate_binary/large": {
+      "median": 34681.59375,
+      "lower": 34236.84375,
+      "upper": 35123.796875,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 34724.12541482301,
+      "max_rss_bytes": 35098624
+    },
+    "json_generate_binary/small": {
+      "median": 386.222412109375,
+      "lower": 382.817626953125,
+      "upper": 387.497802734375,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 387.4186197916667,
+      "max_rss_bytes": 35098624
+    },
+    "json_streaming_lexer/rows_10": {
+      "median": 3622.505859375,
+      "lower": 3613.583984375,
+      "upper": 3631.224609375,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 3643.0849600324373,
+      "max_rss_bytes": 35098624
+    },
+    "json_streaming_lexer/rows_1000": {
+      "median": 204772.5,
+      "lower": 204368.875,
+      "upper": 206892.8125,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 205786.10883797053,
+      "max_rss_bytes": 35098624
+    },
+    "kv_get/cluster/bare/q64": {
+      "median": 10322.048828125,
+      "lower": 10044.49609375,
+      "upper": 10631.06640625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 15535.617618110236,
+      "max_rss_bytes": 34607104,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/bare/t1": {
+      "median": 101120.0,
+      "lower": 97024.0,
+      "upper": 104192.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 64264.27906467335,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 9113.015600944738,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/q64": {
+      "median": 12318.07421875,
+      "lower": 11903.43359375,
+      "upper": 12863.56640625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 18625.595376394052,
+      "max_rss_bytes": 34607104,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t1": {
+      "median": 109824.0,
+      "lower": 105216.0,
+      "upper": 134656.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 71172.01938610662,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 7727.169701369633,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t8": {
+      "median": 184832.0,
+      "lower": 179712.0,
+      "upper": 257536.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 37932.090578946714,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 38337.617424803124,
+      "server_version": "8.0.3"
+    },
+    "kv_get/fake/bare/q64": {
+      "median": 6528.17578125,
+      "lower": 5907.99609375,
+      "upper": 7424.015625,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 11934.849330357143,
+      "max_rss_bytes": 35229696
+    },
+    "kv_get/fake/bare/t1": {
+      "median": 79616.0,
+      "lower": 78080.0,
+      "upper": 83200.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 91840.76787933325,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 11722.708800898745
+    },
+    "kv_get/fake/q64": {
+      "median": 7649.90625,
+      "lower": 7109.37109375,
+      "upper": 7831.6484375,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 13869.469154343808,
+      "max_rss_bytes": 35229696
+    },
+    "kv_get/fake/t1": {
+      "median": 86784.0,
+      "lower": 81152.0,
+      "upper": 93440.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 99928.12457189825,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 10939.251802612263
+    },
+    "kv_get/fake/t8": {
+      "median": 164352.0,
+      "lower": 162304.0,
+      "upper": 166400.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 40784.44143775631,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 47509.32716402564
+    },
+    "kv_upsert/cluster/bare/q64": {
+      "median": 42854.6953125,
+      "lower": 37768.66015625,
+      "upper": 47276.125,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 23339.061579799763,
+      "max_rss_bytes": 34607104,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/bare/t1": {
+      "median": 253440.0,
+      "lower": 246272.0,
+      "upper": 279552.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 105803.6837631057,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 3048.624754929201,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/q64": {
+      "median": 51759.1796875,
+      "lower": 44175.0234375,
+      "upper": 58142.625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 28022.966533687944,
+      "max_rss_bytes": 34607104,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t1": {
+      "median": 256512.0,
+      "lower": 229888.0,
+      "upper": 289792.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 110273.73452096459,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 3433.3477847392414,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t8": {
+      "median": 829440.0,
+      "lower": 763904.0,
+      "upper": 1046528.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 64882.74472491185,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 8961.875849061162,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/fake/bare/q64": {
+      "median": 7871.21484375,
+      "lower": 7785.25390625,
+      "upper": 7932.65625,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 16363.831980110775,
+      "max_rss_bytes": 35229696
+    },
+    "kv_upsert/fake/bare/t1": {
+      "median": 86272.0,
+      "lower": 82688.0,
+      "upper": 94976.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 100508.05775500699,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 10727.272378705644
+    },
+    "kv_upsert/fake/q64": {
+      "median": 9229.130859375,
+      "lower": 9082.5859375,
+      "upper": 9293.716796875,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 18839.321228638775,
+      "max_rss_bytes": 35229696
+    },
+    "kv_upsert/fake/t1": {
+      "median": 88832.0,
+      "lower": 86784.0,
+      "upper": 99072.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 101935.37334031313,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 10497.217394635662
+    },
+    "kv_upsert/fake/t8": {
+      "median": 166400.0,
+      "lower": 164352.0,
+      "upper": 171520.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 47360.77999481731,
+      "max_rss_bytes": 35229696,
+      "ops_per_second": 46048.19253586389
+    },
+    "kv_upsert_get/cluster/c20": {
+      "median": 4104192.0,
+      "lower": 3842048.0,
+      "upper": 4308992.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 227555.3789083201,
+      "max_rss_bytes": 63868928,
+      "ops_per_second": 4436.253132791191,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/c20/mixed": {
+      "median": 3858432.0,
+      "lower": 3301376.0,
+      "upper": 4243456.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 222770.59084851178,
+      "max_rss_bytes": 63979520,
+      "ops_per_second": 4963.517150069482,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20": {
+      "median": 2220032.0,
+      "lower": 2084864.0,
+      "upper": 2809856.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 103663.92485402386,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 8063.52762007936,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed": {
+      "median": 2121728.0,
+      "lower": 2043904.0,
+      "upper": 2613248.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 102715.5509783728,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 8301.853194243195,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed/bare": {
+      "median": 2105344.0,
+      "lower": 2019328.0,
+      "upper": 2285568.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 94505.10795155345,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 8302.973741318292,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed/trace": {
+      "median": 2596864.0,
+      "lower": 2482176.0,
+      "upper": 3252224.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 141544.93590173838,
+      "max_rss_bytes": 63979520,
+      "ops_per_second": 7170.660662608051,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/raw": {
+      "median": 2068480.0,
+      "lower": 1953792.0,
+      "upper": 2596864.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 93075.99243856332,
+      "max_rss_bytes": 34607104,
+      "ops_per_second": 8704.79907950994,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/fake/c20": {
+      "median": 1142784.0,
+      "lower": 1126400.0,
+      "upper": 1175552.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 200777.08592777085,
+      "max_rss_bytes": 81739776,
+      "ops_per_second": 17058.261588661226
+    },
+    "kv_upsert_get/fake/c20/mixed": {
+      "median": 1126400.0,
+      "lower": 1101824.0,
+      "upper": 1126400.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 195644.11104879418,
+      "max_rss_bytes": 82251776,
+      "ops_per_second": 17330.549506670766
+    },
+    "kv_upsert_get/fake/t20": {
+      "median": 681984.0,
+      "lower": 677888.0,
+      "upper": 694272.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 80659.5744680851,
+      "max_rss_bytes": 61505536,
+      "ops_per_second": 28902.097836434656
+    },
+    "kv_upsert_get/fake/t20/mixed": {
+      "median": 686080.0,
+      "lower": 677888.0,
+      "upper": 690176.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 77523.51151372658,
+      "max_rss_bytes": 61587456,
+      "ops_per_second": 28901.461450616982
+    },
+    "kv_upsert_get/fake/t20/mixed/bare": {
+      "median": 624640.0,
+      "lower": 624640.0,
+      "upper": 632832.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 71426.24747803708,
+      "max_rss_bytes": 61956096,
+      "ops_per_second": 31408.129657048245
+    },
+    "kv_upsert_get/fake/t20/mixed/trace": {
+      "median": 907264.0,
+      "lower": 894976.0,
+      "upper": 911360.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 123118.81505204164,
+      "max_rss_bytes": 87371776,
+      "ops_per_second": 21644.33310155206
+    },
+    "kv_upsert_get/fake/t20/raw": {
+      "median": 673792.0,
+      "lower": 665600.0,
+      "upper": 677888.0,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 72191.11438718757,
+      "max_rss_bytes": 61566976,
+      "ops_per_second": 29375.97101442994
+    },
+    "mcbp_parser_next/plain": {
+      "median": 136.087646484375,
+      "lower": 135.2890625,
+      "upper": 146.273681640625,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 136.65852955106368,
+      "max_rss_bytes": 35098624
+    },
+    "mcbp_parser_next/snappy": {
+      "median": 298.071533203125,
+      "lower": 296.7633056640625,
+      "upper": 300.7218017578125,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 299.5265639308608,
+      "max_rss_bytes": 35098624
+    },
+    "mcbp_session_dispatch_lookups/t1": {
+      "median": 39.469635009765625,
+      "lower": 39.45741271972656,
+      "upper": 39.633819580078125,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 39.70376240838434,
+      "max_rss_bytes": 35098624
+    },
+    "mcbp_session_dispatch_lookups/t8": {
+      "median": 1504.630615234375,
+      "lower": 1496.884765625,
+      "upper": 1519.860595703125,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 744.6875776737525,
+      "max_rss_bytes": 35098624
+    },
+    "vbucket_hash/crc32_t1": {
+      "median": 13.092086791992188,
+      "lower": 13.086051940917969,
+      "upper": 13.186248779296875,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 13.136010420949836,
+      "max_rss_bytes": 35098624
+    },
+    "vbucket_hash/map_key_t1": {
+      "median": 23.880538940429688,
+      "lower": 23.812225341796875,
+      "upper": 24.206466674804688,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 23.961281776428223,
+      "max_rss_bytes": 35098624
+    },
+    "vbucket_hash/map_key_t8": {
+      "median": 35.111419677734375,
+      "lower": 35.06855010986328,
+      "upper": 35.309852600097656,
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cpu_ns_per_op": 35.144839079483695,
+      "max_rss_bytes": 35098624
+    }
+  },
+  "descriptions": {
+    "json_generate_binary": "Serialises a small JSON document and an 80-item nested document with core::utils::json::generate_binary.",
+    "json_streaming_lexer": "Parses a query response of 10 or 1,000 rows with core::utils::json::streaming_lexer, fed in 4 KiB chunks.",
+    "kv_get": "Gets one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert": "Upserts one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert_get": "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 threads, sharing one cluster or with one each, with and without trace logging.",
+    "mcbp_parser_next": "Decodes one GET response frame per iteration with mcbp_parser::next, plain and Snappy-compressed.",
+    "mcbp_session_dispatch_lookups": "Performs the four session lookups of one KV dispatch per iteration on 1 and 8 threads.",
+    "vbucket_hash": "Hashes a key with CRC32, and maps it to its vBucket and node in a 1,024-vBucket map."
+  },
+  "run": "2026-11-16T17:20:07Z"
+}
