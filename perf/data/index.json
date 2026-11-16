@@ -1,5 +1,12 @@
 [
   {
+    "id": "e2778a5adb95a479bfdf5f0997c86a91135db18b-20261116T222242Z",
+    "sha": "e2778a5adb95a479bfdf5f0997c86a91135db18b",
+    "date": "2026-11-16T21:47:42Z",
+    "run": "2026-11-16T22:22:42Z",
+    "cpu_model": "AMD EPYC 7763 64-Core Processor"
+  },
+  {
     "id": "ca1f787fec23e1db05a8c7ddf7820057baf9386c-20261116T172551Z",
     "sha": "ca1f787fec23e1db05a8c7ddf7820057baf9386c",
     "date": "2026-11-16T16:57:06Z",
