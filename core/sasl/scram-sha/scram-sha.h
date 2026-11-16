@@ -137,6 +137,13 @@ protected:
   std::string saltedPassword;
   std::string salt;
   unsigned int iterationCount = 4096;
+
+  enum class StepState {
+    WAIT_SERVER_FIRST,
+    WAIT_SERVER_FINAL,
+    DONE,
+  };
+  StepState state_{ StepState::WAIT_SERVER_FIRST };
 };
 
 class Sha512ClientBackend : public ClientBackend

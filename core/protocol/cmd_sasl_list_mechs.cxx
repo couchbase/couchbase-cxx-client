@@ -33,9 +33,16 @@ sasl_list_mechs_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
-    auto previous = body.begin();
-    auto current = std::find(
-      body.begin() + framing_extras_size + extras_size + key_size, body.end(), std::byte{ ' ' });
+    const auto prefix_size = static_cast<std::size_t>(framing_extras_size) + extras_size + key_size;
+    if (prefix_size > body.size()) {
+      return false;
+    }
+    supported_mechs_.clear();
+    auto previous = body.begin() + static_cast<std::ptrdiff_t>(prefix_size);
+    if (previous == body.end()) {
+      return true;
+    }
+    auto current = std::find(previous, body.end(), std::byte{ ' ' });
     std::string mech;
     while (current != body.end()) {
       mech.resize(static_cast<std::size_t>(std::distance(previous, current)));
