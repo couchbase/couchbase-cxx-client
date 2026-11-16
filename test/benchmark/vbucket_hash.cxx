@@ -46,6 +46,24 @@ make_keys() -> std::vector<std::string>
 }
 
 auto
+make_keys_64b() -> std::vector<std::string>
+{
+  std::vector<std::string> keys;
+  keys.reserve(key_count);
+  for (std::size_t i = 0; i < key_count; ++i) {
+    std::string key =
+      "tenant::00000000-0000-4000-8000-000000000001::user::" + std::to_string(i) + "::";
+    if (key.size() < 64) {
+      key.append(64 - key.size(), 'x');
+    } else {
+      key.resize(64);
+    }
+    keys.emplace_back(std::move(key));
+  }
+  return keys;
+}
+
+auto
 make_configuration() -> core::topology::configuration
 {
   tao::json::value rows = tao::json::empty_array;
@@ -72,6 +90,7 @@ void
 vbucket_hash(state& st)
 {
   const auto keys = make_keys();
+  const auto keys_64b = make_keys_64b();
   const auto config = make_configuration();
 
   std::size_t i = 0;
@@ -81,8 +100,20 @@ vbucket_hash(state& st)
   });
 
   i = 0;
+  st.batched("crc32_64b_t1", 1, [&] {
+    const auto& key = keys_64b[i++ % key_count];
+    do_not_optimize(core::utils::hash_crc32(key.data(), key.size()));
+  });
+
+  i = 0;
   st.batched("map_key_t1", 1, [&] {
     const auto& key = keys[i++ % key_count];
+    do_not_optimize(config.map_key(key, 0));
+  });
+
+  i = 0;
+  st.batched("map_key_64b_t1", 1, [&] {
+    const auto& key = keys_64b[i++ % key_count];
     do_not_optimize(config.map_key(key, 0));
   });
 
@@ -90,6 +121,12 @@ vbucket_hash(state& st)
   st.batched("map_key_t8", 8, [&] {
     thread_local std::size_t index = 0;
     const auto& key = keys[index++ % key_count];
+    do_not_optimize(config.map_key(key, 0));
+  });
+
+  st.batched("map_key_64b_t8", 8, [&] {
+    thread_local std::size_t index = 0;
+    const auto& key = keys_64b[index++ % key_count];
     do_not_optimize(config.map_key(key, 0));
   });
 }
