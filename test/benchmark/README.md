@@ -112,7 +112,7 @@ A batched key fails when no batch reached 1 ms before `--max-time`. It has no sa
 | `benchmark_vbucket_hash` | `vbucket_hash` | CRC32 and key-to-vbucket mapping, on 1 and 8 threads. |
 | `benchmark_json` | `json_generate_binary`, `json_streaming_lexer` | JSON encoding, and the streaming lexer on a query response. |
 | `benchmark_mcbp_parser` | `mcbp_parser_next` | Parsing MCBP response frames fed in 16 KiB reads, as a session reads its socket, plain and Snappy-compressed. |
-| `benchmark_mcbp_session` | `mcbp_session_dispatch_lookups` | Session lookups of one KV dispatch on 1 and 8 threads sharing an unconnected session. |
+| `benchmark_mcbp_session` | `mcbp_session_dispatch_lookups`, `mcbp_protocol_key`, `mcbp_command_upsert`, `mcbp_get_make_response` | Session lookups of one KV dispatch on 1 and 8 threads, protocol key encoding, `mcbp_command` construction, and `get_request::make_response`. |
 | `benchmark_observability` | `meter_wrapper_logging`, `meter_wrapper_noop`, `tracer_wrapper_threshold`, `kv_error_context_success` | Metric recording, span creation, and KV error context construction on 1 and 8 threads. |
 | `benchmark_kv_fake` | `kv_get`, `kv_upsert`, `kv_upsert_get` | The KV round trip against an in-process fake server. |
 | `benchmark_kv_cluster` | `kv_get`, `kv_upsert`, `kv_upsert_get` | The same KV round trip against a real cluster. |

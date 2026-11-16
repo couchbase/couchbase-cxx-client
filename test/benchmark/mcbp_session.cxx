@@ -17,24 +17,37 @@
 
 #include "bench_registry.hxx"
 
+#include "core/document_id.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
+#include "core/io/mcbp_command.hxx"
+#include "core/io/mcbp_message.hxx"
 #include "core/io/mcbp_session.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_upsert.hxx"
 #include "core/origin.hxx"
+#include "core/protocol/client_opcode.hxx"
 #include "core/protocol/cmd_hello.hxx"
 #include "core/protocol/hello_feature.hxx"
+#include "core/protocol/magic.hxx"
+#include "core/utils/byteswap.hxx"
 #include "core/utils/connection_string.hxx"
 
 #include <couchbase/retry_reason.hxx>
 
 #include <asio/io_context.hpp>
 
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace couchbase::test::bench
@@ -146,15 +159,99 @@ mcbp_session_dispatch_lookups(state& st)
     });
   }
 }
+
+void
+mcbp_protocol_key(state& st)
+{
+  st.batched("default_collection", 1, [&] {
+    core::document_id id{ "default", "_default", "_default", "bench::document::000001" };
+    id.collection_uid(0);
+    do_not_optimize(core::make_protocol_key(id));
+  });
+  st.batched("named_collection", 1, [&] {
+    core::document_id id{ "default", "inventory", "airline", "bench::document::000001" };
+    id.collection_uid(42);
+    do_not_optimize(core::make_protocol_key(id));
+  });
+}
+
+struct stub_command_manager {
+};
+
+void
+mcbp_command_upsert(state& st)
+{
+  asio::io_context io{};
+  auto manager = std::make_shared<stub_command_manager>();
+  const core::document_id id{ "default", "_default", "_default", "bench::document::000001" };
+  for (const auto& [variant, size] : {
+         std::pair<std::string_view, std::size_t>{ "kib_1", 1024 },
+         std::pair<std::string_view, std::size_t>{ "kib_64", 65536 },
+       }) {
+    std::vector<std::byte> value(size, std::byte{ 'x' });
+    st.batched(variant, 1, [&] {
+      core::operations::upsert_request req{ id, std::move(value) };
+      core::operations::mcbp_command<stub_command_manager, core::operations::upsert_request> cmd{
+        io, manager, std::move(req), std::chrono::milliseconds{ 2500 }
+      };
+      do_not_optimize(cmd);
+      value = std::move(cmd.request.value);
+    });
+  }
+}
+
+void
+mcbp_get_make_response(state& st)
+{
+  const core::operations::get_request req{ core::document_id{
+    "default", "_default", "_default", "bench::document::000001" } };
+  for (const auto& [variant, value_size] : {
+         std::pair<std::string_view, std::size_t>{ "kib_1", 1024 },
+         std::pair<std::string_view, std::size_t>{ "kib_64", 65536 },
+       }) {
+    const std::size_t size = value_size;
+    std::vector<std::byte> body(4 + size, std::byte{ 'x' });
+    st.batched(variant, 1, [&] {
+      core::io::mcbp_message msg{};
+      msg.header.magic = static_cast<std::uint8_t>(core::protocol::magic::client_response);
+      msg.header.opcode = static_cast<std::uint8_t>(core::protocol::client_opcode::get);
+      msg.header.extlen = 4;
+      msg.header.bodylen = core::utils::host_to_network(static_cast<std::uint32_t>(4 + size));
+      msg.body = std::move(body);
+      core::operations::get_request::encoded_response_type encoded{ std::move(msg) };
+      auto response = req.make_response({}, std::move(encoded));
+      if (response.value.size() != size) {
+        throw std::runtime_error("unexpected get_response value size");
+      }
+      do_not_optimize(response);
+      body = std::move(encoded.data());
+    });
+  }
+}
 } // namespace
 
 auto
 benchmarks() -> bench_suite
 {
-  return { suite_name,
-           { { CASE(mcbp_session_dispatch_lookups),
-               {},
-               "Performs the four session lookups of one KV dispatch per iteration on 1 and 8 "
-               "threads." } } };
+  return {
+    suite_name,
+    {
+      { CASE(mcbp_session_dispatch_lookups),
+        {},
+        "Performs the four session lookups of one KV dispatch per iteration on 1 and 8 "
+        "threads." },
+      { CASE(mcbp_protocol_key),
+        {},
+        "Constructs a document_id and encodes its MCBP protocol key for the default and a named "
+        "collection." },
+      { CASE(mcbp_command_upsert),
+        {},
+        "Constructs an mcbp_command for an upsert_request carrying a 1 KiB or 64 KiB value." },
+      { CASE(mcbp_get_make_response),
+        {},
+        "Decodes a 1 KiB or 64 KiB GET response frame and builds get_response with "
+        "get_request::make_response." },
+    },
+  };
 }
 } // namespace couchbase::test::bench
