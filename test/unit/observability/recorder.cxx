@@ -24,10 +24,13 @@
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace couchbase::test
 {
@@ -41,6 +44,70 @@ public:
     -> std::shared_ptr<couchbase::metrics::value_recorder> override
   {
     return nullptr;
+  }
+};
+
+class recording_value_recorder : public couchbase::metrics::value_recorder
+{
+public:
+  explicit recording_value_recorder(std::vector<std::map<std::string, std::string>>& recorded,
+                                    std::map<std::string, std::string> tags)
+    : recorded_{ recorded }
+    , tags_{ std::move(tags) }
+  {
+  }
+
+  void record_value(std::int64_t /* value */) override
+  {
+    recorded_.push_back(tags_);
+  }
+
+private:
+  std::vector<std::map<std::string, std::string>>& recorded_;
+  std::map<std::string, std::string> tags_;
+};
+
+class recording_meter : public couchbase::metrics::meter
+{
+public:
+  std::vector<std::map<std::string, std::string>> recorded{};
+
+  auto get_value_recorder(const std::string& /* name */,
+                          const std::map<std::string, std::string>& tags)
+    -> std::shared_ptr<couchbase::metrics::value_recorder> override
+  {
+    return std::make_shared<recording_value_recorder>(recorded, tags);
+  }
+};
+
+class recording_span : public couchbase::tracing::request_span
+{
+public:
+  using couchbase::tracing::request_span::request_span;
+
+  bool ended{ false };
+
+  void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
+  {
+  }
+
+  void add_tag(const std::string& /* name */, const std::string& /* value */) override
+  {
+  }
+
+  void end() override
+  {
+    ended = true;
+  }
+};
+
+class recording_tracer : public couchbase::tracing::request_tracer
+{
+public:
+  auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
+    -> std::shared_ptr<couchbase::tracing::request_span> override
+  {
+    return std::make_shared<recording_span>(std::move(name), std::move(parent));
   }
 };
 
@@ -66,6 +133,30 @@ finish_tolerates_an_expired_meter([[maybe_unused]] context& ctx)
     },
     "finish() records nothing rather than dereferencing the expired meter");
 }
+
+void
+tracing_suboperation_creates_child_span_without_recording_metrics([[maybe_unused]] context& ctx)
+{
+  auto raw_meter = std::make_shared<recording_meter>();
+  auto tracer =
+    couchbase::core::tracing::tracer_wrapper::create(std::make_shared<recording_tracer>(), nullptr);
+  auto meter = couchbase::core::metrics::meter_wrapper::create(raw_meter, nullptr);
+
+  auto parent = couchbase::core::impl::observability_recorder::create(
+    "manager_query_get_all_indexes", nullptr, tracer, meter);
+  auto child = parent->record_tracing_suboperation("query");
+
+  assert_true(child->operation_span()->parent() == parent->operation_span(),
+              "the sub-operation span is parented to the outer operation span");
+
+  child->finish(0, {});
+  parent->finish(0, {});
+
+  assert_eq(raw_meter->recorded.size(), std::size_t{ 1 }, "only the outer operation is metered");
+  assert_eq(raw_meter->recorded.front().at("db.operation.name"),
+            "manager_query_get_all_indexes",
+            "the metered operation is the outer management call");
+}
 } // namespace
 
 auto
@@ -75,6 +166,7 @@ tests() -> test_suite
     suite_name,
     {
       { CASE(finish_tolerates_an_expired_meter) },
+      { CASE(tracing_suboperation_creates_child_span_without_recording_metrics) },
     },
   };
 }
