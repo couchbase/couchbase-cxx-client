@@ -95,6 +95,19 @@ make_value(std::size_t i, std::mt19937& rng) -> std::string
   return value;
 }
 
+// 18-20-byte JSON values (46-48-byte frames), so one 16 KiB socket read holds ~340 pipelined
+// frames.
+auto
+make_small_frames() -> std::vector<std::byte>
+{
+  std::vector<std::byte> frames;
+  for (std::size_t i = 0; i < frame_count; ++i) {
+    const std::string value = R"({"id":)" + std::to_string(i) + R"(,"ok":true})";
+    append_get_response(frames, static_cast<std::uint32_t>(i), 0, value);
+  }
+  return frames;
+}
+
 auto
 make_frames(bool compress, std::string& first_value) -> std::vector<std::byte>
 {
@@ -168,6 +181,7 @@ drain(state& st, std::string_view variant, const std::vector<std::byte>& frames)
 void
 mcbp_parser_next(state& st)
 {
+  drain(st, "small", make_small_frames());
   std::string value;
   drain(st, "plain", make_frames(false, value));
   const auto compressed = make_frames(true, value);
