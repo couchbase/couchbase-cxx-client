@@ -61,17 +61,38 @@ large_document() -> tao::json::value
   return { { "items", items } };
 }
 
+// Strings with escapes and multi-byte spans, where consecutive write() calls cross vector capacity
+// boundaries without an intervening single-byte emplace_back.
+auto
+escaped_document() -> tao::json::value
+{
+  tao::json::value items = tao::json::empty_array;
+  for (std::size_t i = 0; i < 40; ++i) {
+    items.push_back({
+      { "id", i },
+      { "message",
+        "line 1\t\"quoted value " + std::to_string(i) +
+          "\"\nline 2\tpath\\to\\resource\r\nline 3\tdetail=\"ok\"" },
+    });
+  }
+  return { { "logs", items } };
+}
+
 void
 json_generate_binary(state& st)
 {
   const auto small = small_document();
   const auto large = large_document();
+  const auto escaped = escaped_document();
 
   st.batched("small", 1, [&] {
     do_not_optimize(core::utils::json::generate_binary(small));
   });
   st.batched("large", 1, [&] {
     do_not_optimize(core::utils::json::generate_binary(large));
+  });
+  st.batched("escaped", 1, [&] {
+    do_not_optimize(core::utils::json::generate_binary(escaped));
   });
 }
 
@@ -97,27 +118,50 @@ query_response(std::size_t row_count) -> std::string
   return body;
 }
 
-// Registers the three handlers the way core's row streamer does, then feeds the response in chunks
-// the size of a socket read. One iteration parses the whole response. Throws unless the lexer
-// completed without error after emitting expected_rows rows, so a lexer that stops early fails the
-// case rather than reading as faster.
+// A query response with a large metadata preamble before "results", parsed without registering
+// on_metadata_header_complete.
+auto
+metadata_heavy_query_response(std::size_t row_count) -> std::string
+{
+  std::string body = R"({"requestID":"9739203f-9cd5-45cd-8e3a-31c27407d66a",)"
+                     R"("clientContextID":"2067c2c25c32545c-0000000000000001",)";
+  for (std::size_t i = 0; i < 24; ++i) {
+    body += R"("metadata_attribute_name_)" + std::to_string(i) + R"(":{"nested_attribute_name_)" +
+            std::to_string(i) + R"(":"value_)" + std::to_string(i) + R"("},)";
+  }
+  body += R"("results":[)";
+  for (std::size_t i = 0; i < row_count; ++i) {
+    if (i > 0) {
+      body += ',';
+    }
+    body += R"({"id":"bench::)" + std::to_string(i) + R"(","value":)" + std::to_string(i) + '}';
+  }
+  body += R"(],"status":"success"})";
+  return body;
+}
+
+// Registers the handlers and feeds the response in chunks the size of a socket read. One iteration
+// parses the whole response. Throws unless the lexer completed without error after emitting
+// expected_rows rows, so a lexer that stops early fails the case rather than reading as faster.
 void
-parse_response(const std::string& body, std::size_t expected_rows)
+parse_response(const std::string& body, std::size_t expected_rows, bool with_header_callback = true)
 {
   constexpr std::size_t chunk_size = 4096;
   core::utils::json::streaming_lexer lexer("/results/^", 4);
   std::size_t rows = 0;
-  lexer.on_metadata_header_complete([](std::error_code ec, std::string&& meta_header) {
-    const auto last_non_ws = meta_header.find_last_not_of(" \t\f\v\n\r");
-    if (last_non_ws != std::string::npos) {
-      meta_header.erase(last_non_ws + 1);
-    }
-    if (!meta_header.empty() && meta_header.back() == '[') {
-      meta_header.append("]}");
-    }
-    do_not_optimize(ec);
-    do_not_optimize(meta_header);
-  });
+  if (with_header_callback) {
+    lexer.on_metadata_header_complete([](std::error_code ec, std::string&& meta_header) {
+      const auto last_non_ws = meta_header.find_last_not_of(" \t\f\v\n\r");
+      if (last_non_ws != std::string::npos) {
+        meta_header.erase(last_non_ws + 1);
+      }
+      if (!meta_header.empty() && meta_header.back() == '[') {
+        meta_header.append("]}");
+      }
+      do_not_optimize(ec);
+      do_not_optimize(meta_header);
+    });
+  }
   lexer.on_row([&rows](std::string&& row) {
     do_not_optimize(row);
     ++rows;
@@ -144,14 +188,19 @@ json_streaming_lexer(state& st)
 {
   const auto small = query_response(10);
   const auto large = query_response(1000);
+  const auto metadata = metadata_heavy_query_response(10);
   parse_response(small, 10);
   parse_response(large, 1000);
+  parse_response(metadata, 10, false);
 
   st.batched("rows_10", 1, [&] {
     parse_response(small, 10);
   });
   st.batched("rows_1000", 1, [&] {
     parse_response(large, 1000);
+  });
+  st.batched("metadata_no_header", 1, [&] {
+    parse_response(metadata, 10, false);
   });
 }
 } // namespace
