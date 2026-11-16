@@ -1,5 +1,12 @@
 [
   {
+    "id": "ca1f787fec23e1db05a8c7ddf7820057baf9386c-20261116T172551Z",
+    "sha": "ca1f787fec23e1db05a8c7ddf7820057baf9386c",
+    "date": "2026-11-16T16:57:06Z",
+    "run": "2026-11-16T17:25:51Z",
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz"
+  },
+  {
     "id": "3f831ab2eae9a54b55586d3020a0b99ae68e63ab-20261116T172007Z",
     "sha": "3f831ab2eae9a54b55586d3020a0b99ae68e63ab",
     "date": "2026-11-16T16:49:08Z",
