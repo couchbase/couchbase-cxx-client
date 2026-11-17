@@ -20,21 +20,49 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/topology/configuration.hxx"
 
-#include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
 namespace couchbase::core
 {
 
+inline constexpr auto feature_mask_width = std::numeric_limits<std::uint64_t>::digits;
+
+// The bit for a feature in a 64-bit feature mask, or zero for a feature whose ordinal does not fit:
+// such a feature is never reported as supported, and shifting by the width is undefined.
+[[nodiscard]] constexpr auto
+feature_mask_bit(protocol::hello_feature feature) noexcept -> std::uint64_t
+{
+  const auto bit = static_cast<std::uint16_t>(feature);
+  return bit < feature_mask_width ? (std::uint64_t{ 1 } << bit) : 0;
+}
+
+[[nodiscard]] inline auto
+compute_features_mask(const std::vector<protocol::hello_feature>& features) noexcept
+  -> std::uint64_t
+{
+  std::uint64_t mask = 0;
+  for (const auto f : features) {
+    mask |= feature_mask_bit(f);
+  }
+  return mask;
+}
+
 struct mcbp_context {
   const std::optional<topology::configuration>& config;
-  const std::vector<protocol::hello_feature>& supported_features;
+  std::uint64_t supported_features_mask{ 0 };
 
-  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const -> bool
+  mcbp_context(const std::optional<topology::configuration>& cfg, std::uint64_t mask) noexcept
+    : config{ cfg }
+    , supported_features_mask{ mask }
   {
-    return std::find(supported_features.begin(), supported_features.end(), feature) !=
-           supported_features.end();
+  }
+
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const noexcept -> bool
+  {
+    return (supported_features_mask & feature_mask_bit(feature)) != 0;
   }
 };
 
