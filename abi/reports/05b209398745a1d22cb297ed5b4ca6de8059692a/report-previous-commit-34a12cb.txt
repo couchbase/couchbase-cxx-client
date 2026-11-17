@@ -1,0 +1,13 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 34a12cb: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 2 added types
+
+2 added types unreachable from any public interface:
+
+  [A] 'class fmt::v11::dynamic_format_arg_store<fmt::v11::context>'
+  [A] 'struct std::_Optional_payload_base<unsignedchar>::_Empty_byte' at optional:203:1
+
