@@ -121,9 +121,14 @@ public:
    * @param ec
    * @volatile
    */
-  void override_ec(std::error_code ec)
+  virtual void override_ec(std::error_code ec)
   {
     ec_ = ec;
+  }
+
+  void override_operation_id(std::string operation_id)
+  {
+    operation_id_ = std::move(operation_id);
   }
 
   /**
