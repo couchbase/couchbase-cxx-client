@@ -21,6 +21,8 @@
 
 #include <tao/json/forward.hpp>
 
+#include <cstddef>
+
 namespace couchbase::core::utils::json
 {
 auto
@@ -37,6 +39,9 @@ generate(const tao::json::value& object) -> std::string;
 
 auto
 parse_binary(const std::vector<std::byte>& input) -> tao::json::value;
+
+// generate_binary shrinks a result whose capacity exceeds this multiple of its size.
+inline constexpr std::size_t generate_binary_max_capacity_factor{ 4 };
 
 auto
 generate_binary(const tao::json::value& object) -> std::vector<std::byte>;
