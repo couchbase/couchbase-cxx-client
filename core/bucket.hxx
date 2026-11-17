@@ -90,7 +90,7 @@ public:
       return;
     }
     auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
-      ctx_, shared_from_this(), request, default_timeout());
+      ctx_, shared_from_this(), std::move(request), default_timeout());
     // Capture the command weakly. The completion is stored as cmd->handler_, so a strong capture
     // forms a cmd -> handler_ -> cmd cycle that is only broken when the handler runs. For
     // cancellable (replica fan-out) operations the completion is dispatched onto the command strand

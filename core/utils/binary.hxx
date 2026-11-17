@@ -55,7 +55,7 @@ to_binary(InputIterator first, InputIterator last, OutputIterator result) noexce
 
 template<typename Container, typename OutputIterator>
 auto
-to_binary(Container container, OutputIterator result) noexcept -> OutputIterator
+to_binary(const Container& container, OutputIterator result) noexcept -> OutputIterator
 {
   return to_binary(std::begin(container), std::end(container), result);
 }
