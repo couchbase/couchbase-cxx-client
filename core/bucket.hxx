@@ -97,9 +97,9 @@ public:
     // and can be discarded by io_context teardown (close() followed by io_context::stop()) before
     // it runs, which would leak the command and everything it transitively holds (the bucket, its
     // topology configuration, error map and session buffers). The command's lifetime is anchored
-    // independently by its deadline timer and session registration, so on any real completion the
-    // weak pointer still locks; when it does not, the command has already been torn down and the
-    // caller's response was going to be dropped regardless.
+    // independently by its deadline queue entry and session registration, so on any real completion
+    // the weak pointer still locks; when it does not, the command has already been torn down and
+    // the caller's response was going to be dropped regardless.
     cmd->start([weak_cmd = cmd->weak_from_this(), handler = std::forward<Handler>(handler)](
                  std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
       auto cmd = weak_cmd.lock();
@@ -317,6 +317,11 @@ public:
   auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
     -> std::error_code;
 
+  // Deadlines of this bucket's pending KV commands. A pending command holds the bucket, and the
+  // queue holds the command, so the bucket outlives every pending command unless close() answers
+  // them.
+  [[nodiscard]] auto deadlines() -> io::deadline_queue&;
+
 private:
   [[nodiscard]] auto default_timeout() const -> std::chrono::milliseconds;
   [[nodiscard]] auto next_session_index() -> std::size_t;
@@ -329,5 +334,6 @@ private:
 
   asio::io_context& ctx_;
   std::shared_ptr<bucket_impl> impl_;
+  std::shared_ptr<io::deadline_queue> deadlines_;
 };
 } // namespace couchbase::core

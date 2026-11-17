@@ -268,8 +268,8 @@ public:
   {
     bucket_->close();
     session_.stop(couchbase::retry_reason::do_not_retry);
-    // Ready handlers only: a case that failed before completing its command leaves the deadline
-    // armed, and waiting for it would turn the failed assertion into a timeout.
+    // Ready handlers only: close() answered every pending command, and waiting for anything else
+    // would turn a failed assertion into a timeout.
     io_.restart();
     while (io_.poll() > 0) {
     }
@@ -1890,6 +1890,11 @@ public:
   explicit gated_retry_manager(std::shared_ptr<bucket> forward)
     : bucket_{ std::move(forward) }
   {
+  }
+
+  [[nodiscard]] auto deadlines() -> couchbase::core::io::deadline_queue&
+  {
+    return bucket_->deadlines();
   }
 
   [[nodiscard]] auto name() const -> const std::string&
