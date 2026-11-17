@@ -763,6 +763,58 @@ reset_stops_the_file_logger([[maybe_unused]] context& ctx)
   assert_false(initialized_after_reset, "no file logger is left after the reset");
   assert_false(logs_after_reset, "nothing is logged after the reset");
 }
+
+// should_log() answers from a per-thread cache of the file logger. These pin that the cached answer
+// follows every way the level or the logger can change.
+void
+should_log_follows_set_log_levels([[maybe_unused]] context& ctx)
+{
+  core_logger::reset();
+  core_logger::create_blackhole_logger();
+  core_logger::set_log_levels(core_logger::level::info);
+  const bool info_at_info = core_logger::should_log(core_logger::level::info);
+  const bool trace_at_info = core_logger::should_log(core_logger::level::trace);
+  core_logger::set_log_levels(core_logger::level::trace);
+  const bool trace_at_trace = core_logger::should_log(core_logger::level::trace);
+  core_logger::reset();
+
+  assert_true(info_at_info, "info is logged at info");
+  assert_false(trace_at_info, "trace is not logged at info");
+  assert_true(trace_at_trace, "trace is logged once the level is lowered");
+}
+
+void
+should_log_follows_a_level_set_on_the_logger_itself([[maybe_unused]] context& ctx)
+{
+  core_logger::reset();
+  core_logger::create_blackhole_logger();
+  core_logger::set_log_levels(core_logger::level::trace);
+  const bool info_before = core_logger::should_log(core_logger::level::info);
+  core_logger::get()->set_level(spdlog::level::warn);
+  const bool info_after = core_logger::should_log(core_logger::level::info);
+  const bool warn_after = core_logger::should_log(core_logger::level::warn);
+  core_logger::reset();
+
+  assert_true(info_before, "info is logged at trace");
+  assert_false(info_after, "info is not logged once the logger is raised to warn");
+  assert_true(warn_after, "warn still is");
+}
+
+void
+should_log_follows_a_replaced_file_logger([[maybe_unused]] context& ctx)
+{
+  core_logger::reset();
+  core_logger::create_blackhole_logger();
+  core_logger::set_log_levels(core_logger::level::trace);
+  const bool before = core_logger::should_log(core_logger::level::trace);
+  // The replacement starts at off.
+  core_logger::create_blackhole_logger();
+  const bool after = core_logger::should_log(core_logger::level::critical);
+  core_logger::reset();
+
+  assert_true(before, "the first logger logs trace");
+  assert_false(after, "the replacement logs nothing");
+}
 } // namespace
 
 auto
@@ -772,6 +824,9 @@ tests() -> test_suite
     suite_name,
     {
       { CASE(reset_stops_the_file_logger) },
+      { CASE(should_log_follows_set_log_levels) },
+      { CASE(should_log_follows_a_level_set_on_the_logger_itself) },
+      { CASE(should_log_follows_a_replaced_file_logger) },
       { CASE(a_registered_callback_receives_every_logged_message) },
       { CASE(the_callback_receives_the_level_of_each_message) },
       { CASE(logging_with_no_callback_registered_does_not_throw) },

@@ -112,8 +112,10 @@ std::atomic<bool> log_callback_present{ false };
 thread_local std::shared_ptr<spdlog::logger> cached_file_logger{ nullptr };
 thread_local int cached_file_logger_version{ -1 };
 
+// The calling thread's cached logger, refreshed when the file logger has been replaced. The next
+// call on this thread may replace the logger it holds, so the reference must not be kept.
 auto
-get_file_logger() -> std::shared_ptr<spdlog::logger>
+get_file_logger_ref() -> const std::shared_ptr<spdlog::logger>&
 {
   if (cached_file_logger_version != file_logger_version) {
     const std::scoped_lock lock(file_logger_mutex);
@@ -121,6 +123,12 @@ get_file_logger() -> std::shared_ptr<spdlog::logger>
     cached_file_logger_version = file_logger_version;
   }
   return cached_file_logger;
+}
+
+auto
+get_file_logger() -> std::shared_ptr<spdlog::logger>
+{
+  return get_file_logger_ref();
 }
 
 auto
@@ -313,7 +321,8 @@ level_from_str(const std::string& str) -> level
 auto
 should_log(level lvl) -> bool
 {
-  const auto logger = get_file_logger();
+  // Asked by every level-checked log macro: no reference count is taken.
+  const auto& logger = get_file_logger_ref();
   return logger != nullptr && logger->should_log(translate_level(lvl));
 }
 
