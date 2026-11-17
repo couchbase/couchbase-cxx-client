@@ -1,0 +1,2 @@
+libcouchbase_cxx_client.so.1.5 against previous commit f0c0459: no ABI change
+
