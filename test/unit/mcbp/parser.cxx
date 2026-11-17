@@ -171,6 +171,47 @@ alt_sizes_splits_the_two_one_byte_header_fields([[maybe_unused]] context& ctx)
   assert_eq(sizes.framing_extras, std::uint8_t{ 3 }, "byte 2 is the framing extras size");
   assert_eq(sizes.key, std::uint8_t{ 5 }, "byte 3 is the key size");
 }
+
+void
+a_large_frame_fed_in_socket_reads_is_copied_a_bounded_number_of_times([[maybe_unused]] context& ctx)
+{
+  // A frame larger than one socket read reaches feed() in 16 KiB pieces while
+  // next() reports need_data. Growing the buffer to exactly the size needed
+  // on every read copies the whole prefix each time: 510 MiB for a 4 MiB
+  // frame. Geometric growth copies a small multiple of the frame.
+  constexpr std::size_t read_size = 16384;
+  constexpr std::size_t frame_size = 4U << 20U;
+  constexpr std::size_t header_size = 24;
+
+  auto header = frame_builder{}
+                  .magic_byte(magic::client_response)
+                  .opcode(0x00)
+                  .bodylen(static_cast<std::uint32_t>(frame_size - header_size))
+                  .bytes;
+  std::vector<std::byte> wire(header.begin(), header.end());
+  wire.resize(frame_size, std::byte{ 0xAB });
+
+  mcbp_parser parser;
+  mcbp_message msg;
+  std::size_t copied = 0;
+  for (std::size_t offset = 0; offset < wire.size(); offset += read_size) {
+    const auto capacity = parser.buf.capacity();
+    const auto buffered = parser.buf.size();
+    const auto first = wire.begin() + static_cast<std::ptrdiff_t>(offset);
+    parser.feed(first, first + static_cast<std::ptrdiff_t>(read_size));
+    if (parser.buf.capacity() != capacity) {
+      copied += buffered;
+    }
+    if (offset + read_size < wire.size()) {
+      assert_eq(parser.next(msg), mcbp_parser::result::need_data, "the frame is incomplete");
+    }
+  }
+
+  assert_true(copied <= 16U << 20U, "reallocations copy at most 16 MiB of buffered bytes");
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "the complete frame parses");
+  assert_eq(
+    msg.body.size(), frame_size - header_size, "the body is the whole frame after the header");
+}
 } // namespace
 
 auto
@@ -183,6 +224,7 @@ tests() -> test_suite
       { CASE(a_prefix_larger_than_a_non_empty_body_is_rejected) },
       { CASE(a_well_formed_frame_is_accepted) },
       { CASE(alt_sizes_splits_the_two_one_byte_header_fields) },
+      { CASE(a_large_frame_fed_in_socket_reads_is_copied_a_bounded_number_of_times) },
     },
   };
 }
