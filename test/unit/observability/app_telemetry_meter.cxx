@@ -20,6 +20,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "core/app_telemetry_meter.hxx"
+#include "core/topology/configuration.hxx"
 
 #include <chrono>
 #include <cstddef>
@@ -27,6 +28,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace couchbase::test
@@ -168,6 +170,64 @@ histogram_sums_are_reported_in_milliseconds([[maybe_unused]] context& ctx)
     assert_eq(*count, std::uint64_t{ 1 }, fmt::format("{} counts one observation", metric));
   }
 }
+void
+label_values_are_escaped([[maybe_unused]] context& ctx)
+{
+  app_telemetry_meter meter;
+  couchbase::core::topology::configuration config{};
+  couchbase::core::topology::configuration::node node{};
+  node.node_uuid = "u\"1";
+  node.hostname = "h\n1";
+  couchbase::core::topology::configuration::alternate_address alt{};
+  alt.hostname = R"(a\1)";
+  node.alt.emplace("external", alt);
+  config.nodes.push_back(node);
+  meter.update_config(config);
+
+  const auto recorder = meter.value_recorder(node.node_uuid, "b\"1");
+  recorder->update_counter(app_telemetry_counter::kv_r_total);
+  recorder->record_latency(app_telemetry_latency::kv_retrieval, std::chrono::milliseconds{ 5 });
+
+  std::istringstream lines{ generate_report_text(meter) };
+  std::size_t count = 0;
+  for (std::string line; std::getline(lines, line); ++count) {
+    assert_true(line.rfind("sdk_", 0) == 0, fmt::format("a metric line: {}", line));
+    assert_true(line.find(R"(node_uuid="u\"1",node="h\n1",alt_node="a\\1",bucket="b\"1")") !=
+                  std::string::npos,
+                fmt::format("escaped labels: {}", line));
+  }
+  assert_true(count > 0, "the report has metric lines");
+}
+
+void
+config_and_agent_updates_do_not_race_report_generation([[maybe_unused]] context& ctx)
+{
+  app_telemetry_meter meter;
+  couchbase::core::topology::configuration config{};
+  for (std::size_t i = 0; i < 8; ++i) {
+    couchbase::core::topology::configuration::node node{};
+    node.node_uuid = fmt::format("uuid-{}", i);
+    node.hostname = fmt::format("host-{}", i);
+    config.nodes.push_back(std::move(node));
+  }
+
+  std::vector<std::thread> threads;
+  for (std::size_t t = 0; t < 4; ++t) {
+    threads.emplace_back([&meter, &config, t]() {
+      for (std::size_t i = 0; i < 200; ++i) {
+        meter.update_config(config);
+        meter.update_agent(fmt::format("app-{}", t));
+        meter.value_recorder(fmt::format("uuid-{}", i % 8), "default")
+          ->update_counter(app_telemetry_counter::kv_r_total);
+        std::vector<std::byte> buffer{};
+        meter.generate_report(buffer);
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
 } // namespace
 
 auto
@@ -181,6 +241,8 @@ tests() -> test_suite
       { CASE(recorder_cache_re_resolves_after_a_report_swaps_recorders) },
       { CASE(recorder_cache_re_resolves_when_the_key_changes) },
       { CASE(histogram_sums_are_reported_in_milliseconds) },
+      { CASE(label_values_are_escaped) },
+      { CASE(config_and_agent_updates_do_not_race_report_generation) },
     },
   };
 }
