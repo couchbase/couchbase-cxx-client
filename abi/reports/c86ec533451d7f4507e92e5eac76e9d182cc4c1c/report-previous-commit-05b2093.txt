@@ -1,0 +1,15 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 05b2093: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 4 removed, 0 changed, 0 added types
+
+4 removed types unreachable from any public interface:
+
+  [D] 'class fmt::v11::dynamic_format_arg_store<fmt::v11::context>'
+  [D] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<conststd::chrono::duration<longint,std::ratio<1,1000000>>*,std::vector<std::chrono::duration<longint,std::ratio<1,1000000>>,std::allocator<std::chrono::duration<longint,std::ratio<1,1000000>>>>>>'
+  [D] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<std::chrono::duration<longint,std::ratio<1,1000000>>*,std::vector<std::chrono::duration<longint,std::ratio<1,1000000>>,std::allocator<std::chrono::duration<longint,std::ratio<1,1000000>>>>>>'
+  [D] 'struct std::enable_if<true,std::chrono::duration<longint,std::ratio<1,1000000>>*>' at type_traits:139:1
+
