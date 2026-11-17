@@ -63,6 +63,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -438,14 +439,18 @@ constructing_mcbp_command_moves_request_value_buffer([[maybe_unused]] context& c
 }
 
 // bucket::close() marks the bucket closed, then stops its sessions, which answer every written
-// command with request_canceled. A command that retries that answer finds the bucket closed.
+// command with request_canceled, and only then stops the deadline queue. A command that retries
+// the session's answer finds the bucket closed. Starting the command after close() keeps that
+// order: the stopped queue's on_stop() arrives through the io_context, after the session's
+// answer, or the retry of it, has completed the command.
 template<typename Request>
 [[nodiscard]] auto
-answer_in_flight_command_by_closing_its_bucket(Request request) -> std::vector<std::error_code>
+answer_command_retried_on_a_closed_bucket(Request request) -> std::vector<std::error_code>
 {
   std::vector<std::error_code> completions{};
   {
     command_fixture fixture{};
+    fixture.close_bucket();
     request.id = { "default", "_default", "_default", "key" };
     auto cmd = fixture.make_command(std::move(request));
     cmd->start([&completions](std::error_code ec, std::optional<mcbp_message>&& /* msg */) {
@@ -453,8 +458,8 @@ answer_in_flight_command_by_closing_its_bucket(Request request) -> std::vector<s
     });
     cmd->send_to(fixture.session());
 
-    fixture.close_bucket();
     fixture.session().stop(couchbase::retry_reason::do_not_retry);
+    assert_eq(completions.size(), std::size_t{ 1 }, "answered before on_stop() can run");
     fixture.io().run();
   }
   return completions;
@@ -464,7 +469,7 @@ void
 an_idempotent_command_in_flight_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
 {
   const auto completions =
-    answer_in_flight_command_by_closing_its_bucket(couchbase::core::operations::get_request{});
+    answer_command_retried_on_a_closed_bucket(couchbase::core::operations::get_request{});
 
   assert_eq(completions.size(), std::size_t{ 1 }, "the command completes once");
   assert_eq(completions.front(),
@@ -476,7 +481,7 @@ void
 a_non_idempotent_command_in_flight_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
 {
   const auto completions =
-    answer_in_flight_command_by_closing_its_bucket(couchbase::core::operations::upsert_request{});
+    answer_command_retried_on_a_closed_bucket(couchbase::core::operations::upsert_request{});
 
   assert_eq(completions.size(), std::size_t{ 1 }, "the command completes once");
   assert_eq(completions.front(),
@@ -504,6 +509,52 @@ each_dispatch_of_a_command_is_encoded_afresh([[maybe_unused]] context& ctx)
               std::size_t{ 5 },
               "one durability frame and one preserve-expiry frame");
   }
+}
+
+void
+a_command_whose_handler_throws_is_released_before_its_deadline([[maybe_unused]] context& ctx)
+{
+  command_fixture fixture{};
+  couchbase::core::operations::get_request request{};
+  request.id = { "default", "_default", "_default", "key" };
+  auto cmd = fixture.make_command(std::move(request));
+  cmd->start([](std::error_code /* ec */, std::optional<mcbp_message>&& /* msg */) {
+    throw std::runtime_error("handler");
+  });
+  const std::weak_ptr weak{ cmd };
+
+  bool thrown = false;
+  try {
+    cmd->cancel(couchbase::retry_reason::do_not_retry, /* is_timeout = */ false);
+  } catch (const std::runtime_error&) {
+    thrown = true;
+  }
+  cmd.reset();
+
+  assert_true(thrown, "the handler's exception reaches the caller");
+  // A linked deadline entry would keep the command alive for the ten-second timeout.
+  assert_true(weak.expired(), "the deadline queue released the command");
+}
+
+void
+a_command_pending_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  command_fixture fixture{};
+  couchbase::core::operations::upsert_request request{};
+  request.id = named_collection_key();
+  auto cmd = fixture.make_command(std::move(request));
+  cmd->start([&completions](std::error_code ec, std::optional<mcbp_message>&& /* msg */) {
+    completions.push_back(ec);
+  });
+
+  fixture.close_bucket();
+
+  // A timeout here would tell the caller the deadline passed, ten seconds early.
+  assert_eq(completions.size(), std::size_t{ 1 }, "close() answers the command");
+  assert_eq(completions.front(),
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "the command was abandoned, not timed out");
 }
 } // namespace
 
@@ -537,6 +588,8 @@ tests() -> test_suite
         timeout::fast },
       { CASE(constructing_mcbp_command_moves_request_value_buffer), {}, timeout::fast },
       { CASE(each_dispatch_of_a_command_is_encoded_afresh), {}, timeout::fast },
+      { CASE(a_command_whose_handler_throws_is_released_before_its_deadline), {}, timeout::fast },
+      { CASE(a_command_pending_when_its_bucket_closes_is_canceled), {}, timeout::fast },
     },
   };
 }

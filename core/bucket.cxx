@@ -1411,12 +1411,14 @@ bucket::bucket(std::string client_id,
                                          std::move(state_listener),
                                          ctx,
                                          tls) }
+  , deadlines_{ std::make_shared<io::deadline_queue>(ctx) }
 {
 }
 
 bucket::~bucket()
 {
   impl_->close();
+  deadlines_->stop();
 }
 
 void
@@ -1459,7 +1461,15 @@ bucket::name() const -> const std::string&
 void
 bucket::close()
 {
-  return impl_->close();
+  impl_->close();
+  // Answers the commands that impl_->close() did not.
+  deadlines_->stop();
+}
+
+auto
+bucket::deadlines() -> io::deadline_queue&
+{
+  return *deadlines_;
 }
 
 auto
