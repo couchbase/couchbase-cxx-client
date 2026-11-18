@@ -117,7 +117,7 @@ public:
     }
     return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
       if (ec == errc::common::request_canceled) {
-        return cmd->cancel(retry_reason::do_not_retry);
+        return cmd->cancel(retry_reason::do_not_retry, /* is_timeout = */ false);
       }
       self->map_and_send(cmd);
     });
@@ -145,7 +145,7 @@ public:
       return;
     }
     if (is_closed()) {
-      return cmd->cancel(retry_reason::do_not_retry);
+      return cmd->cancel(retry_reason::do_not_retry, /* is_timeout = */ false);
     }
     std::size_t index;
     if (cmd->request.id.use_any_session()) {
@@ -232,7 +232,7 @@ public:
       }
       return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
-          return cmd->cancel(retry_reason::do_not_retry);
+          return cmd->cancel(retry_reason::do_not_retry, /* is_timeout = */ false);
         }
         self->map_and_send(cmd);
       });
@@ -274,7 +274,7 @@ public:
       return;
     }
     if (is_closed()) {
-      return cmd->cancel(retry_reason::do_not_retry);
+      return cmd->cancel(retry_reason::do_not_retry, /* is_timeout = */ false);
     }
     cmd->retry_backoff.expires_after(duration);
     cmd->retry_backoff.async_wait([self = shared_from_this(), cmd](std::error_code ec) mutable {

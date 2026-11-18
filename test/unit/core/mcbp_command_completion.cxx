@@ -39,6 +39,7 @@
 #include "core/io/mcbp_session.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
+#include "core/operations/document_get.hxx"
 #include "core/operations/document_get_replica.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/origin.hxx"
@@ -150,6 +151,11 @@ public:
   {
     return std::make_shared<couchbase::core::operations::mcbp_command<bucket, Request>>(
       io_, bucket_, std::move(request), command_timeout);
+  }
+
+  void close_bucket()
+  {
+    bucket_->close();
   }
 
   [[nodiscard]] auto io() -> asio::io_context&
@@ -428,6 +434,53 @@ constructing_mcbp_command_moves_request_value_buffer([[maybe_unused]] context& c
   assert_true(cmd->request.value.data() == original_data,
               "mcbp_command moves the request value buffer instead of copying it");
 }
+
+// bucket::close() marks the bucket closed, then stops its sessions, which answer every written
+// command with request_canceled. A command that retries that answer finds the bucket closed.
+template<typename Request>
+[[nodiscard]] auto
+answer_in_flight_command_by_closing_its_bucket(Request request) -> std::vector<std::error_code>
+{
+  std::vector<std::error_code> completions{};
+  {
+    command_fixture fixture{};
+    request.id = { "default", "_default", "_default", "key" };
+    auto cmd = fixture.make_command(std::move(request));
+    cmd->start([&completions](std::error_code ec, std::optional<mcbp_message>&& /* msg */) {
+      completions.push_back(ec);
+    });
+    cmd->send_to(fixture.session());
+
+    fixture.close_bucket();
+    fixture.session().stop(couchbase::retry_reason::do_not_retry);
+    fixture.io().run();
+  }
+  return completions;
+}
+
+void
+an_idempotent_command_in_flight_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
+{
+  const auto completions =
+    answer_in_flight_command_by_closing_its_bucket(couchbase::core::operations::get_request{});
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "the command completes once");
+  assert_eq(completions.front(),
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "the retry finds the bucket closed and is abandoned, not timed out");
+}
+
+void
+a_non_idempotent_command_in_flight_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
+{
+  const auto completions =
+    answer_in_flight_command_by_closing_its_bucket(couchbase::core::operations::upsert_request{});
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "the command completes once");
+  assert_eq(completions.front(),
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "the session's answer completes the command");
+}
 } // namespace
 
 auto
@@ -452,6 +505,12 @@ tests() -> test_suite
         {},
         timeout::fast },
       { CASE(a_rejected_retry_keeps_the_ambiguity_of_an_earlier_attempt), {}, timeout::fast },
+      { CASE(an_idempotent_command_in_flight_when_its_bucket_closes_is_canceled),
+        {},
+        timeout::fast },
+      { CASE(a_non_idempotent_command_in_flight_when_its_bucket_closes_is_canceled),
+        {},
+        timeout::fast },
       { CASE(constructing_mcbp_command_moves_request_value_buffer), {}, timeout::fast },
     },
   };
