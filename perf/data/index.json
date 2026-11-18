@@ -1,5 +1,12 @@
 [
   {
+    "id": "2aff149590c5a1055294a4c939d6ac7863f82f6f-20261118T175302Z",
+    "sha": "2aff149590c5a1055294a4c939d6ac7863f82f6f",
+    "date": "2026-11-18T17:14:05Z",
+    "run": "2026-11-18T17:53:02Z",
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor"
+  },
+  {
     "id": "0130a2cbae0c0d683d744abbae58ca5e3b18b0a7-20261118T171427Z",
     "sha": "0130a2cbae0c0d683d744abbae58ca5e3b18b0a7",
     "date": "2026-11-18T16:25:24Z",
