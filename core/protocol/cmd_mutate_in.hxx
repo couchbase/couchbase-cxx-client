@@ -181,6 +181,8 @@ public:
   void specs(std::vector<couchbase::core::impl::subdoc::command> specs)
   {
     specs_ = std::move(specs);
+    // value() serializes specs_ once; a retry encodes the request again with new flags
+    value_.clear();
   }
 
   void durability(durability_level level, std::optional<std::uint16_t> timeout);

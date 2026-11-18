@@ -88,9 +88,11 @@ public:
     }
   }
 
-  void specs(const std::vector<couchbase::core::impl::subdoc::command>& specs)
+  void specs(std::vector<couchbase::core::impl::subdoc::command> specs)
   {
-    specs_ = specs;
+    specs_ = std::move(specs);
+    // value() serializes specs_ once; a retry encodes the request again with new flags
+    value_.clear();
   }
 
   [[nodiscard]] auto key() const -> const auto&

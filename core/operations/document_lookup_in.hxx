@@ -65,6 +65,11 @@ struct lookup_in_request {
   io::retry_context<false> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
+  // Set by the first encode_to(), which records each spec's caller position and moves XATTR specs
+  // first. A retry encodes the request again, and must not number the specs a second time.
+  // Replacing specs after an encode requires resetting it.
+  bool specs_ordered{ false };
+
   [[nodiscard]] auto encode_to(encoded_request_type& encoded,
                                mcbp_context&& context) -> std::error_code;
 
