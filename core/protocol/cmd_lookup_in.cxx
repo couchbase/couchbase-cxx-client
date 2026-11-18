@@ -46,18 +46,26 @@ lookup_in_response_body::parse(key_value_status_code status,
     while (static_cast<std::size_t>(offset) < body.size()) {
       lookup_in_field field;
 
+      if (body.size() - static_cast<std::size_t>(offset) <
+          sizeof(std::uint16_t) + sizeof(std::uint32_t)) {
+        return false;
+      }
       std::uint16_t entry_status = 0;
       memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
       entry_status = utils::network_to_host(entry_status);
-      Expects(is_valid_status(entry_status));
+      if (!is_valid_status(entry_status)) {
+        return false;
+      }
       field.status = static_cast<key_value_status_code>(entry_status);
       offset += static_cast<offset_type>(sizeof(entry_status));
 
       std::uint32_t entry_size = 0;
       memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
       entry_size = utils::network_to_host(entry_size);
-      Expects(entry_size < 20 * 1024 * 1024);
       offset += static_cast<offset_type>(sizeof(entry_size));
+      if (entry_size > body.size() - static_cast<std::size_t>(offset)) {
+        return false;
+      }
 
       field.value.resize(entry_size);
       memcpy(field.value.data(), body.data() + offset, entry_size);

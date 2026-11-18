@@ -77,7 +77,11 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
       encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
     deleted = true;
   }
-  if (!ctx.ec()) {
+  std::error_code ec = ctx.ec();
+  if (!ec && encoded.body().fields().size() != specs.size()) {
+    ec = errc::network::protocol_error;
+  }
+  if (!ec) {
     fields.resize(specs.size());
     for (size_t i = 0; i < specs.size(); ++i) {
       const auto& req_entry = specs[i];
@@ -120,7 +124,7 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
   }
 
   return lookup_in_response{
-    make_subdocument_error_context(ctx, ctx.ec(), first_error_path, first_error_index, deleted),
+    make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted),
     cas,
     std::move(fields),
     deleted,

@@ -39,6 +39,14 @@ observe_seqno_response_body::parse(key_value_status_code status,
   if (status == key_value_status_code::success) {
     using offset_type = std::vector<std::byte>::difference_type;
     offset_type offset = framing_extras_size + extras_size + key_size;
+    // failover flag, partition id, partition uuid, two sequence numbers; then two more on failover
+    const std::size_t fixed_size = 1 + 2 + (3 * sizeof(std::uint64_t));
+    if (body.size() < static_cast<std::size_t>(offset) + fixed_size ||
+        (body[static_cast<std::size_t>(offset)] != std::byte{ 0 } &&
+         body.size() <
+           static_cast<std::size_t>(offset) + fixed_size + (2 * sizeof(std::uint64_t)))) {
+      return false;
+    }
 
     const bool failover =
       std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;

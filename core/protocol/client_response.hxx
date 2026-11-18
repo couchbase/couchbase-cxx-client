@@ -192,6 +192,11 @@ public:
 
   void parse_body()
   {
+    // The body parsers read the extras and key inside this prefix, and the enhanced error decoder
+    // starts after it.
+    if (std::size_t{ framing_extras_size_ } + extras_size_ + key_size_ > data_.size()) {
+      return;
+    }
     parse_framing_extras();
     bool parsed =
       body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
