@@ -39,20 +39,17 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   if (specs.empty()) {
     return errc::common::invalid_argument;
   }
-  for (std::size_t i = 0; i < specs.size(); ++i) {
-    auto& entry = specs[i];
-    entry.original_index_ = i;
-
-    if (impl::subdoc::has_binary_value_path_flag(specs[i].flags_) &&
-        !context.supports_feature(protocol::hello_feature::subdoc_binary_xattr)) {
-      impl::subdoc::reset_binary_value_path_flag(specs[i].flags_);
+  if (!specs_ordered) {
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+      specs[i].original_index_ = i;
     }
+    std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
+      /* move XATTRs to the beginning of the vector */
+      return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
+             !core::impl::subdoc::has_xattr_path_flag(rhs.flags_);
+    });
+    specs_ordered = true;
   }
-  std::stable_sort(specs.begin(), specs.end(), [](const auto& lhs, const auto& rhs) {
-    /* move XATTRs to the beginning of the vector */
-    return core::impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
-           !core::impl::subdoc::has_xattr_path_flag(rhs.flags_);
-  });
 
   encoded.opaque(opaque);
   encoded.partition(partition);
@@ -65,7 +62,14 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   encoded.body().create_as_deleted(create_as_deleted);
   encoded.body().revive_document(revive_document);
   encoded.body().store_semantics(store_semantics);
-  encoded.body().specs(specs);
+  // On a copy: a retry may next reach a node with binary XATTR support.
+  auto wire_specs = specs;
+  if (!context.supports_feature(protocol::hello_feature::subdoc_binary_xattr)) {
+    for (auto& spec : wire_specs) {
+      impl::subdoc::reset_binary_value_path_flag(spec.flags_);
+    }
+  }
+  encoded.body().specs(std::move(wire_specs));
   if (preserve_expiry) {
     encoded.body().preserve_expiry();
   }

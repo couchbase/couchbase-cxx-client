@@ -22,6 +22,7 @@
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/document_get_all_replicas.hxx"
+#include "core/operations/document_get_and_lock.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
@@ -38,6 +39,7 @@
 #include <couchbase/mutate_in_specs.hxx>
 
 #include <algorithm>
+#include <chrono>
 
 // Blocks until every copy of the document answers a full read with the CAS that was written.
 //
@@ -2330,4 +2332,51 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
     REQUIRE(!result.exists(0));
     REQUIRE(!result.content_as<bool>(0));
   }
+}
+
+TEST_CASE("integration: a mutate_in retried on a locked document keeps the caller's spec order",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto key = test::utils::uniq_id("mutate_in_retried");
+  couchbase::core::document_id id{
+    integration.ctx.bucket,
+    "_default",
+    "_default",
+    key,
+  };
+  {
+    couchbase::core::operations::upsert_request req{
+      id, couchbase::core::utils::to_binary(R"({"count":0})")
+    };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+  }
+  {
+    couchbase::core::operations::get_and_lock_request req{ id };
+    // long enough that the mutation below reaches the lock even on a slow runner
+    req.lock_time = 10;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+  }
+
+  // The XATTR spec is encoded first, so the counter is at a different position on the wire.
+  couchbase::core::operations::mutate_in_request req{ id };
+  req.specs =
+    couchbase::mutate_in_specs{
+      couchbase::mutate_in_specs::increment("count", 1),
+      couchbase::mutate_in_specs::upsert("meta.x", 42).xattr().create_path(),
+    }
+      .specs();
+  req.timeout = std::chrono::seconds{ 30 };
+  auto resp = test::utils::execute(integration.cluster, req);
+  REQUIRE_SUCCESS(resp.ctx.ec());
+  REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
+  REQUIRE(resp.fields.size() == 2);
+  REQUIRE(resp.fields[0].original_index == 0);
+  REQUIRE(resp.fields[0].path == "count");
+  REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary("1"));
+  REQUIRE(resp.fields[1].original_index == 1);
+  REQUIRE(resp.fields[1].path == "meta.x");
 }
