@@ -20,8 +20,9 @@
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
-#include <mutex>
 #include <set>
 
 namespace couchbase::core::io
@@ -52,37 +53,63 @@ public:
     return strategy_;
   }
 
-  [[nodiscard]] auto retry_attempts() const -> std::size_t override
+  // Copies take the counts as they are at the time of the copy. Copy assignment stays deleted by
+  // the const members.
+  retry_context(const retry_context& other)
+    : retry_request(other)
+    , identifier_{ other.identifier_ }
+    , strategy_{ other.strategy_ }
+    , retry_attempts_{ other.retry_attempts_.load(std::memory_order_acquire) }
+    , reason_mask_{ other.reason_mask_.load(std::memory_order_acquire) }
   {
-    std::scoped_lock lock(*mutex_);
-    return retry_attempts_;
   }
 
+  [[nodiscard]] auto retry_attempts() const -> std::size_t override
+  {
+    return retry_attempts_.load(std::memory_order_acquire);
+  }
+
+  // A reader that observes an attempt also observes the reason recorded with it: the reason is
+  // set before the release increment that the acquire load of the count pairs with.
   [[nodiscard]] auto retry_reasons() const -> std::set<retry_reason> override
   {
-    std::scoped_lock lock(*mutex_);
-    return reasons_;
+    (void)retry_attempts_.load(std::memory_order_acquire);
+    std::uint64_t mask = reason_mask_.load(std::memory_order_acquire);
+    std::set<retry_reason> reasons{};
+    for (unsigned bit = 0; mask != 0; ++bit, mask >>= 1U) {
+      if ((mask & 1U) != 0) {
+        reasons.insert(static_cast<retry_reason>(bit));
+      }
+    }
+    return reasons;
   }
 
   void record_retry_attempt(retry_reason reason) override
   {
-    std::scoped_lock lock(*mutex_);
-    ++retry_attempts_;
-    reasons_.insert(reason);
+    reason_mask_.fetch_or(bit_of(reason), std::memory_order_relaxed);
+    retry_attempts_.fetch_add(1, std::memory_order_release);
   }
 
   void add_reason(retry_reason reason)
   {
-    std::scoped_lock lock(*mutex_);
-    reasons_.insert(reason);
+    reason_mask_.fetch_or(bit_of(reason), std::memory_order_release);
   }
 
 private:
+  // views_no_active_partition is the last retry_reason enumerator. A new one must be added to this
+  // check and to the round-trip test.
+  static_assert(static_cast<std::size_t>(retry_reason::views_no_active_partition) < 64,
+                "every retry_reason must fit in reason_mask_");
+
+  static constexpr auto bit_of(retry_reason reason) -> std::uint64_t
+  {
+    return std::uint64_t{ 1 } << static_cast<unsigned>(reason);
+  }
+
   const std::string identifier_;
   const std::shared_ptr<retry_strategy> strategy_;
-  mutable std::shared_ptr<std::mutex> mutex_{ std::make_shared<std::mutex>() };
-  std::size_t retry_attempts_{ 0 };
-  std::set<retry_reason> reasons_{};
+  std::atomic<std::size_t> retry_attempts_{ 0 };
+  std::atomic<std::uint64_t> reason_mask_{ 0 };
 };
 
 } // namespace couchbase::core::io
