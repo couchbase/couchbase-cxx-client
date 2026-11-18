@@ -1,0 +1,50 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 526c660: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 18 removed, 0 changed, 18 added types
+
+18 removed types unreachable from any public interface:
+
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:34&,constauto:35&)>>' at predefined_ops.h:145:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:34&,constauto:35&)>>' at predefined_ops.h:168:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:212:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:212:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:212:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:212:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:212:1
+  [D] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:34&,constauto:35&)>>' at predefined_ops.h:212:1
+
+18 added types unreachable from any public interface:
+
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_iter<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:145:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Iter_comp_val<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:168:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::impl::lookup_in_replica_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:212:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::impl::lookup_in_replica_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:212:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::lookup_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:30&,constauto:31&)>>' at predefined_ops.h:212:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::lookup_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:32&,constauto:33&)>>' at predefined_ops.h:212:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::mutate_in_request::encode_to(encoded_request_type&,couchbase::core::mcbp_context&&)::<lambda(constauto:31&,constauto:32&)>>' at predefined_ops.h:212:1
+  [A] 'struct __gnu_cxx::__ops::_Val_comp_iter<couchbase::core::operations::mutate_in_request::make_response(couchbase::core::key_value_error_context&&,constencoded_response_type&)const::<lambda(constauto:33&,constauto:34&)>>' at predefined_ops.h:212:1
+
