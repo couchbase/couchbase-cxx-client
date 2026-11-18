@@ -37,6 +37,7 @@
 #include "core/impl/with_cancellation.hxx"
 #include "core/io/mcbp_command.hxx"
 #include "core/io/mcbp_session.hxx"
+#include "core/io/mcbp_session_unit_test_api.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
 #include "core/operations/document_get.hxx"
@@ -50,6 +51,7 @@
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/connection_string.hxx"
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 
@@ -481,6 +483,28 @@ a_non_idempotent_command_in_flight_when_its_bucket_closes_is_canceled([[maybe_un
             std::error_code{ couchbase::errc::common::request_canceled },
             "the session's answer completes the command");
 }
+void
+each_dispatch_of_a_command_is_encoded_afresh([[maybe_unused]] context& ctx)
+{
+  command_fixture fixture{};
+  couchbase::core::operations::upsert_request request{ { "default", "_default", "_default", "key" },
+                                                       couchbase::core::utils::to_binary("{}") };
+  request.durability_level = couchbase::durability_level::majority;
+  request.preserve_expiry = true;
+  auto cmd = fixture.make_command(std::move(request));
+  cmd->send_to(fixture.session());
+  cmd->send(); // as a retry dispatches the same command again
+
+  const auto frames = fixture.session().unit_test_api().pending_frames();
+  assert_eq(frames.size(), std::size_t{ 2 }, "both dispatches are written");
+  for (const auto& frame : frames) {
+    // The framing extras length: a durability frame with a timeout takes 4 bytes, a
+    // preserve-expiry frame 1.
+    assert_eq(std::to_integer<std::size_t>(frame.at(2)),
+              std::size_t{ 5 },
+              "one durability frame and one preserve-expiry frame");
+  }
+}
 } // namespace
 
 auto
@@ -512,6 +536,7 @@ tests() -> test_suite
         {},
         timeout::fast },
       { CASE(constructing_mcbp_command_moves_request_value_buffer), {}, timeout::fast },
+      { CASE(each_dispatch_of_a_command_is_encoded_afresh), {}, timeout::fast },
     },
   };
 }

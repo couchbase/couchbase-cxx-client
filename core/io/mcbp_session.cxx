@@ -1703,6 +1703,12 @@ public:
     before_subscribe_ = std::move(hook);
   }
 
+  [[nodiscard]] auto pending_frames() -> std::vector<std::vector<std::byte>>
+  {
+    const std::scoped_lock lock(pending_buffer_mutex_);
+    return pending_buffer_;
+  }
+
   [[nodiscard]] auto pending_opcodes() -> std::vector<protocol::client_opcode>
   {
     const std::scoped_lock lock(pending_buffer_mutex_);
@@ -2680,6 +2686,12 @@ auto
 mcbp_session_unit_test_api::pending_opcodes() const -> std::vector<protocol::client_opcode>
 {
   return impl_->pending_opcodes();
+}
+
+auto
+mcbp_session_unit_test_api::pending_frames() const -> std::vector<std::vector<std::byte>>
+{
+  return impl_->pending_frames();
 }
 
 auto

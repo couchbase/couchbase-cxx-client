@@ -51,12 +51,36 @@
 #include <mutex>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::operations
 {
 
 using mcbp_command_handler =
   utils::movable_function<void(std::error_code, std::optional<io::mcbp_message>&&)>;
+
+// Encodes one dispatch of the request into a fresh encoded request. Request bodies cache their
+// extras and append frame infos, so an encoded request reused by a retry would resend what earlier
+// dispatches encoded.
+template<typename Request>
+auto
+encode_for_dispatch(Request& request, mcbp_context context, std::chrono::milliseconds timeout)
+  -> std::pair<std::error_code, std::vector<std::byte>>
+{
+  typename Request::encoded_request_type encoded{};
+  const bool try_to_compress = context.supports_feature(protocol::hello_feature::snappy);
+  if (auto ec = request.encode_to(encoded, std::move(context)); ec) {
+    return { ec, {} };
+  }
+  if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+    if (request.durability_level != durability_level::none) {
+      encoded.body().durability(
+        request.durability_level,
+        static_cast<std::uint16_t>(static_cast<double>(timeout.count()) * 0.9));
+    }
+  }
+  return { std::error_code{}, encoded.data(try_to_compress) };
+}
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
@@ -77,7 +101,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                             unused_strand>;
   command_strand strand_;
   Request request;
-  encoded_request_type encoded;
   std::optional<std::uint32_t> opaque_{};
   std::optional<io::mcbp_session> session_{};
   mcbp_command_handler handler_{};
@@ -449,18 +472,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       }
     }
 
-    if (auto ec = request.encode_to(encoded, session_->context()); ec) {
+    auto [ec, data] = encode_for_dispatch(request, session_->context(), timeout_);
+    if (ec) {
       return invoke_handler(ec);
     }
-    if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
-      if (request.durability_level != durability_level::none) {
-        encoded.body().durability(
-          request.durability_level,
-          static_cast<std::uint16_t>(static_cast<double>(timeout_.count()) * 0.9));
-      }
-    }
-
-    auto data = encoded.data(session_->supports_feature(protocol::hello_feature::snappy));
     if (!publish_dispatch(state_written | state_published)) {
       return;
     }

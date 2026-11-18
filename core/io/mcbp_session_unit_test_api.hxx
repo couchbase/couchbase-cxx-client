@@ -19,6 +19,7 @@
 
 #include "core/protocol/client_opcode.hxx"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -36,6 +37,9 @@ public:
   // request stays here whatever happens to its subscription, so a test can count writes that a
   // cancellation has already withdrawn.
   [[nodiscard]] auto pending_opcodes() const -> std::vector<protocol::client_opcode>;
+
+  // The requests written before the session bootstrapped, as wire frames, in the order written.
+  [[nodiscard]] auto pending_frames() const -> std::vector<std::vector<std::byte>>;
 
   // Routes a response frame with this opcode, status and opaque to its subscription, as the read
   // loop does for a frame from the socket. Returns false when nothing is subscribed under opaque.
