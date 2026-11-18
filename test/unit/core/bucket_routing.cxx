@@ -506,6 +506,98 @@ a_completed_command_is_not_scheduled_for_retry([[maybe_unused]] context& ctx)
   assert_eq(handler_calls, 1, "the handler did not run again");
   assert_eq(armed, std::size_t{ 0 }, "no retry timer is armed");
 }
+
+// A closed bucket abandons the commands it still holds. Their deadlines have not passed, so each
+// completes with request_canceled; a timeout would misreport it.
+
+[[nodiscard]] auto
+default_collection_get() -> couchbase::core::operations::get_request
+{
+  return couchbase::core::operations::get_request{ couchbase::core::document_id{
+    "default", "_default", "_default", "key" } };
+}
+
+using get_command =
+  couchbase::core::operations::mcbp_command<couchbase::core::bucket,
+                                            couchbase::core::operations::get_request>;
+
+[[nodiscard]] auto
+started_get(bucket_fixture& fixture, std::vector<std::error_code>& completions)
+  -> std::shared_ptr<get_command>
+{
+  auto cmd = std::make_shared<get_command>(
+    fixture.io(), fixture.get(), default_collection_get(), std::chrono::milliseconds{ 10'000 });
+  cmd->start([&completions](std::error_code ec,
+                            std::optional<couchbase::core::io::mcbp_message>&& /* msg */) {
+    completions.push_back(ec);
+  });
+  return cmd;
+}
+
+void
+a_command_waiting_for_the_configuration_is_canceled_by_close([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  bucket_fixture fixture{};
+  fixture.get()->execute(default_collection_get(), [&completions](const auto& response) {
+    completions.push_back(response.ctx.ec());
+  });
+
+  fixture.get()->close();
+  fixture.run();
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "close() answers the command once");
+  assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
+}
+
+void
+a_command_waiting_for_a_session_is_canceled_by_close([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  bucket_fixture fixture{};
+  // Node 0 owns the vbucket and advertises a key-value port, so the command waits for the session
+  // that connect_session() starts.
+  fixture.install_config(1, /* rev = */ 1, /* with_key_value_port = */ true);
+  fixture.get()->execute(default_collection_get(), [&completions](const auto& response) {
+    completions.push_back(response.ctx.ec());
+  });
+
+  fixture.get()->close();
+  fixture.run();
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "close() answers the command once");
+  assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
+}
+
+void
+a_retry_whose_backoff_ends_after_close_is_canceled([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  bucket_fixture fixture{};
+  auto cmd = started_get(fixture, completions);
+  fixture.get()->schedule_for_retry(cmd, std::chrono::milliseconds{ 10 });
+
+  fixture.get()->close();
+  fixture.run();
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "the backoff lap answers the command once");
+  assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
+}
+
+void
+a_retry_scheduled_after_close_is_canceled([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  bucket_fixture fixture{};
+  auto cmd = started_get(fixture, completions);
+
+  fixture.get()->close();
+  fixture.get()->schedule_for_retry(cmd, std::chrono::milliseconds{ 10 });
+  fixture.run();
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "schedule_for_retry() answers the command once");
+  assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
+}
 } // namespace
 
 auto
@@ -538,6 +630,10 @@ tests() -> test_suite
         timeout::fast },
       { CASE(a_completed_command_is_not_routed), {}, timeout::fast },
       { CASE(a_completed_command_is_not_scheduled_for_retry), {}, timeout::fast },
+      { CASE(a_command_waiting_for_the_configuration_is_canceled_by_close), {}, timeout::fast },
+      { CASE(a_command_waiting_for_a_session_is_canceled_by_close), {}, timeout::fast },
+      { CASE(a_retry_whose_backoff_ends_after_close_is_canceled), {}, timeout::fast },
+      { CASE(a_retry_scheduled_after_close_is_canceled), {}, timeout::fast },
     },
   };
 }
