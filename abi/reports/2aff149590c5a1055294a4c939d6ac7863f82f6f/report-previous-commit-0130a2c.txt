@@ -1,0 +1,12 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 0130a2c: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 1 added type
+
+1 added type unreachable from any public interface:
+
+  [A] 'struct std::conditional<true,constspdlog::details::dump_info<__gnu_cxx::__normal_iterator<std::byte*,std::vector<std::byte,std::allocator<std::byte>>>>,spdlog::details::dump_info<__gnu_cxx::__normal_iterator<std::byte*,std::vector<std::byte,std::allocator<std::byte>>>>>' at type_traits:2461:1
+
