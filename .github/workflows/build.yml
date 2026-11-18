@@ -42,6 +42,14 @@ jobs:
           # never exercised against the generated code.
           CB_COUCHBASE2: 1
         run: ./bin/build-tests
+      # Apple clang on these arm64 runners compiles hash_crc32 with the CRC32 instructions, and no
+      # other job runs that path. The macro is required rather than assumed: without it the case
+      # still passes on the software path, and the instructions go untested.
+      - name: Check hash_crc32 on the CRC32 instructions (${{ matrix.os }})
+        timeout-minutes: 10
+        run: |
+          echo | c++ -dM -E - | grep -q '__ARM_FEATURE_CRC32 1'
+          ./cmake-build-tests/test/unit/core/unit_core_topology_configuration
   windows:
     strategy:
       fail-fast: false

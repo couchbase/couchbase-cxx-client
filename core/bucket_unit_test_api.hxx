@@ -21,6 +21,7 @@
 
 #include <couchbase/retry_reason.hxx>
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <system_error>
@@ -46,6 +47,8 @@ public:
                         std::error_code ec,
                         retry_reason reason,
                         std::optional<key_value_error_map_info> error_info);
+
+  [[nodiscard]] auto next_session_index() -> std::size_t;
 
 private:
   friend class bucket;
