@@ -15,14 +15,27 @@
  *   limitations under the License.
  */
 
+#include "framework/errors.hxx"
 #include "framework/test_registry.hxx"
 
+#include "core/impl/error.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/protocol/client_response.hxx"
 #include "core/protocol/cmd_mutate_in.hxx"
+#include "core/protocol/magic.hxx"
+#include "core/utils/byteswap.hxx"
+#include "core/utils/json.hxx"
+
+#include <couchbase/mutate_in_specs.hxx>
 
 #include <couchbase/store_semantics.hxx>
 
+#include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <type_traits>
+#include <utility>
 
 namespace couchbase::test
 {
@@ -210,6 +223,96 @@ disabling_revive_document_leaves_the_other_flags_alone([[maybe_unused]] context&
   assert_eq(flags & body::doc_flag_revive_document, 0, "revive_document is cleared");
   assert_ne(flags & body::doc_flag_access_deleted, 0, "access_deleted survives");
 }
+
+using couchbase::core::key_value_status_code;
+using couchbase::core::operations::mutate_in_request;
+using couchbase::core::operations::mutate_in_response;
+using couchbase::core::protocol::client_response;
+using couchbase::core::protocol::mutate_in_response_body;
+
+// Encodes the specs, which moves XATTR specs first, and decodes a multi-path failure whose one
+// entry fails the spec at wire_index.
+auto
+fail_at_wire_index(couchbase::mutate_in_specs specs, std::uint8_t wire_index) -> mutate_in_response
+{
+  mutate_in_request req{ { "default", "_default", "_default", "doc" } };
+  req.specs = specs.specs();
+  mutate_in_request::encoded_request_type encoded{};
+  assert_success(req.encode_to(encoded, { std::nullopt, {} }), "the request is encoded");
+
+  couchbase::core::io::mcbp_message msg{};
+  msg.header.magic = static_cast<std::uint8_t>(couchbase::core::protocol::magic::client_response);
+  msg.header.opcode = static_cast<std::uint8_t>(mutate_in_response_body::opcode);
+  msg.header.specific = couchbase::core::utils::host_to_network(
+    static_cast<std::uint16_t>(key_value_status_code::subdoc_multi_path_failure));
+  const auto status = static_cast<std::uint16_t>(key_value_status_code::subdoc_path_not_found);
+  // index, then the status; a failed entry carries no value length
+  msg.body = { std::byte{ wire_index },
+               static_cast<std::byte>(status >> 8U),
+               static_cast<std::byte>(status & 0xffU) };
+  msg.header.bodylen =
+    couchbase::core::utils::host_to_network(static_cast<std::uint32_t>(msg.body.size()));
+  return req.make_response({}, client_response<mutate_in_response_body>(std::move(msg)));
+}
+
+auto
+body_then_xattr() -> couchbase::mutate_in_specs
+{
+  return couchbase::mutate_in_specs{
+    couchbase::mutate_in_specs::upsert("body_path", 1),
+    couchbase::mutate_in_specs::upsert("xattr_path", 2).xattr(),
+  };
+}
+
+void
+a_failed_xattr_spec_after_a_body_spec_reports_its_caller_index([[maybe_unused]] context& ctx)
+{
+  const auto resp = fail_at_wire_index(body_then_xattr(), 0);
+
+  assert_error(resp.ctx.ec(), couchbase::errc::key_value::path_not_found, "the spec fails");
+  assert_eq(resp.ctx.first_error_index(), std::optional<std::size_t>{ 1 }, "first_error_index");
+  assert_eq(
+    resp.ctx.first_error_path(), std::optional<std::string>{ "xattr_path" }, "first_error_path");
+}
+
+void
+a_failed_body_spec_before_an_xattr_spec_reports_its_caller_index([[maybe_unused]] context& ctx)
+{
+  const auto resp = fail_at_wire_index(body_then_xattr(), 1);
+
+  assert_error(resp.ctx.ec(), couchbase::errc::key_value::path_not_found, "the spec fails");
+  assert_eq(resp.ctx.first_error_index(), std::optional<std::size_t>{ 0 }, "first_error_index");
+  assert_eq(
+    resp.ctx.first_error_path(), std::optional<std::string>{ "body_path" }, "first_error_path");
+}
+
+void
+the_public_error_context_reports_the_caller_index([[maybe_unused]] context& ctx)
+{
+  const auto resp = fail_at_wire_index(body_then_xattr(), 0);
+  const auto error = couchbase::core::impl::make_error(resp.ctx);
+  const std::string text = error.ctx().to_json();
+  const auto json = couchbase::core::utils::json::parse(text);
+
+  assert_eq(json.at("first_error_index").as<std::size_t>(), std::size_t{ 1 }, "first_error_index");
+  assert_eq(
+    json.at("first_error_path").get_string(), std::string{ "xattr_path" }, "first_error_path");
+}
+
+void
+specs_already_in_encoded_order_keep_their_index([[maybe_unused]] context& ctx)
+{
+  const auto resp = fail_at_wire_index(
+    couchbase::mutate_in_specs{
+      couchbase::mutate_in_specs::upsert("xattr_path", 2).xattr(),
+      couchbase::mutate_in_specs::upsert("body_path", 1),
+    },
+    1);
+
+  assert_eq(resp.ctx.first_error_index(), std::optional<std::size_t>{ 1 }, "first_error_index");
+  assert_eq(
+    resp.ctx.first_error_path(), std::optional<std::string>{ "body_path" }, "first_error_path");
+}
 } // namespace
 
 auto
@@ -232,6 +335,14 @@ tests() -> test_suite
       { CASE(disabling_create_as_deleted_leaves_the_other_flags_alone), {}, timeout::instant },
       { CASE(enabling_revive_document_sets_its_bit), {}, timeout::instant },
       { CASE(disabling_revive_document_leaves_the_other_flags_alone), {}, timeout::instant },
+      { CASE(a_failed_xattr_spec_after_a_body_spec_reports_its_caller_index),
+        {},
+        timeout::instant },
+      { CASE(a_failed_body_spec_before_an_xattr_spec_reports_its_caller_index),
+        {},
+        timeout::instant },
+      { CASE(the_public_error_context_reports_the_caller_index), {}, timeout::instant },
+      { CASE(specs_already_in_encoded_order_keep_their_index), {}, timeout::instant },
     },
   };
 }

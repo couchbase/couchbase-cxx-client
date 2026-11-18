@@ -107,7 +107,8 @@ mutate_in_request::make_response(key_value_error_context&& ctx,
       if (entry.status == key_value_status_code::success) {
         fields[entry.index].value = utils::to_binary(entry.value);
       } else {
-        first_error_index = entry.index;
+        // entry.index is in encoded order, where XATTR specs come first
+        first_error_index = fields[entry.index].original_index;
         first_error_path = fields[entry.index].path;
         fields[entry.index].status = entry.status;
         fields[entry.index].ec = protocol::map_status_code(
