@@ -19,6 +19,7 @@
 
 #include "core/io/mcbp_parser.hxx"
 #include "core/protocol/magic.hxx"
+#include "core/utils/byteswap.hxx"
 
 #include <array>
 #include <cstddef>
@@ -61,12 +62,21 @@ struct frame_builder {
   {
     return set(4, v);
   }
+  auto datatype(std::uint8_t v) -> frame_builder& // byte 5
+  {
+    return set(5, v);
+  }
   auto bodylen(std::uint32_t v) -> frame_builder& // bytes 8-11
   {
     return set(8, static_cast<std::uint8_t>(v >> 24U))
       .set(9, static_cast<std::uint8_t>(v >> 16U))
       .set(10, static_cast<std::uint8_t>(v >> 8U))
       .set(11, static_cast<std::uint8_t>(v));
+  }
+  auto opaque(std::uint32_t v) -> frame_builder& // bytes 12-15 (copied verbatim)
+  {
+    std::memcpy(bytes.data() + 12, &v, sizeof(v));
+    return *this;
   }
 };
 
@@ -78,11 +88,10 @@ a_frame_whose_prefix_exceeds_the_body_is_rejected([[maybe_unused]] context& ctx)
   // bodylen, so the parser must not assume the prefix fits inside the body.
   //
   // magic=client_response, keylen=0xFFFF, extlen=0xFF, bodylen=0
-  //   => prefix_size = 0xFF + 0xFFFF = 65790, against a 24-byte buffer.
+  //   => prefix_size = 0xFF + 0xFFFF = 65790, against an empty body.
   //
-  // Accepting it drives an out-of-bounds read (and, on the snappy path, an
-  // unsigned underflow of "body_size - prefix_size"); under AddressSanitizer
-  // it aborts with a heap-buffer-overflow read of 65790 bytes.
+  // Accepted, it would yield a message whose body is shorter than the extras and key that the
+  // response handlers skip by these sizes.
   auto frame = frame_builder{}
                  .magic_byte(magic::client_response)
                  .opcode(0x00)
@@ -95,7 +104,7 @@ a_frame_whose_prefix_exceeds_the_body_is_rejected([[maybe_unused]] context& ctx)
   parser.feed(frame.begin(), frame.end());
 
   mcbp_message msg;
-  assert_eq(parser.next(msg), mcbp_parser::result::failure, "a prefix larger than the buffer");
+  assert_eq(parser.next(msg), mcbp_parser::result::failure, "a prefix larger than the body");
 }
 
 void
@@ -212,6 +221,318 @@ a_large_frame_fed_in_socket_reads_is_copied_a_bounded_number_of_times([[maybe_un
   assert_eq(
     msg.body.size(), frame_size - header_size, "the body is the whole frame after the header");
 }
+
+void
+pipelined_frames_in_a_single_chunk_and_straddling_chunks_are_parsed_in_order(
+  [[maybe_unused]] context& ctx)
+{
+  std::vector<std::byte> wire;
+  constexpr std::uint32_t frame_count = 64;
+  std::size_t middle_frame_offset = 0;
+  for (std::uint32_t i = 0; i < frame_count; ++i) {
+    if (i == frame_count / 2) {
+      middle_frame_offset = wire.size();
+    }
+    const std::uint32_t body_len = 8U + (i % 17U);
+    auto header = frame_builder{}
+                    .magic_byte(magic::client_response)
+                    .opcode(0x00)
+                    .keylen(0)
+                    .extlen(4)
+                    .bodylen(body_len)
+                    .opaque(i + 100U)
+                    .bytes;
+    wire.insert(wire.end(), header.begin(), header.end());
+    wire.insert(wire.end(), body_len, static_cast<std::byte>(i & 0xffU));
+  }
+
+  // Exercise both compaction branches in mcbp_parser::next(), each with read_offset_ > 0:
+  // - a split inside the middle frame's header, so the second feed starts mid-header;
+  // - a split one byte past that header, so the second feed starts mid-body.
+  for (const std::size_t split : { middle_frame_offset + 7, middle_frame_offset + 24 + 1 }) {
+    mcbp_parser parser;
+    parser.feed(wire.begin(), wire.begin() + static_cast<std::ptrdiff_t>(split));
+
+    std::uint32_t parsed = 0;
+    mcbp_message msg{};
+    while (true) {
+      const auto res = parser.next(msg);
+      if (res == mcbp_parser::result::need_data) {
+        break;
+      }
+      assert_eq(res, mcbp_parser::result::ok, "complete frame in first chunk parses");
+      assert_eq(msg.header.opaque, parsed + 100U, "opaque matches frame index");
+      assert_eq(msg.body.size(), std::size_t{ 8U + (parsed % 17U) }, "body length matches");
+      assert_eq(msg.body.front(), static_cast<std::byte>(parsed & 0xffU), "body payload matches");
+      ++parsed;
+    }
+    assert_true(parsed > 0 && parsed < frame_count, "the split falls inside the frame stream");
+    assert_eq(parser.read_offset_, std::size_t{ 0 }, "compaction resets read_offset_");
+    assert_eq(parser.buf.size(),
+              split - middle_frame_offset,
+              "compaction retains only the unconsumed partial frame");
+
+    parser.feed(wire.begin() + static_cast<std::ptrdiff_t>(split), wire.end());
+    while (parsed < frame_count) {
+      const auto res = parser.next(msg);
+      assert_eq(res, mcbp_parser::result::ok, "remaining frames parse after second chunk");
+      assert_eq(msg.header.opaque, parsed + 100U, "opaque matches frame index");
+      assert_eq(msg.body.size(), std::size_t{ 8U + (parsed % 17U) }, "body length matches");
+      assert_eq(msg.body.back(), static_cast<std::byte>(parsed & 0xffU), "body payload matches");
+      ++parsed;
+    }
+    assert_eq(parser.next(msg), mcbp_parser::result::need_data, "buffer is drained");
+    assert_eq(parser.read_offset_, std::size_t{ 0 }, "drained parser resets read_offset_");
+    assert_eq(parser.buf.size(), std::size_t{ 0 }, "drained parser clears buf");
+  }
+}
+
+void
+bytes_with_invalid_magic_after_a_frame_are_discarded([[maybe_unused]] context& ctx)
+{
+  // The magic checked after a frame is the one at the new read offset. Checking the first byte of
+  // the buffer instead sees the consumed frame's valid magic, keeps the tail, and the next call
+  // parses the 24 zero bytes as a frame with an empty body.
+  auto header = frame_builder{}
+                  .magic_byte(magic::client_response)
+                  .opcode(0x00)
+                  .keylen(0)
+                  .extlen(4)
+                  .bodylen(4)
+                  .bytes;
+
+  std::vector<std::byte> wire(header.begin(), header.end());
+  wire.insert(wire.end(), 4, std::byte{ 0x01 }); // 4-byte extras
+  wire.insert(wire.end(), 24, std::byte{ 0x00 });
+
+  mcbp_parser parser;
+  parser.feed(wire.begin(), wire.end());
+
+  mcbp_message msg{};
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "the valid frame parses");
+  assert_eq(parser.next(msg), mcbp_parser::result::need_data, "nothing is left to parse");
+}
+
+void
+snappy_compressed_frame_is_decompressed_in_place_preserving_prefix([[maybe_unused]] context& ctx)
+{
+  // Raw Snappy stream for 20 bytes ("ABCDABCDABCDABCDABCD"):
+  // 0x14 (uncompressed len = 20), 0x0c (literal 4 bytes), 'A','B','C','D',
+  // 0x3e (copy-2 length 16: ((16 - 1) << 2) | 0x02), 0x04, 0x00 (LE16 offset 4).
+  const std::array<std::uint8_t, 9> snappy_payload{
+    0x14, 0x0c, 'A', 'B', 'C', 'D', 0x3e, 0x04, 0x00,
+  };
+  auto header = frame_builder{}
+                  .magic_byte(magic::client_response)
+                  .opcode(0x00)
+                  .keylen(0)
+                  .extlen(4)
+                  .datatype(0x03) // JSON (0x01) | Snappy (0x02)
+                  .bodylen(4 + static_cast<std::uint32_t>(snappy_payload.size()))
+                  .bytes;
+
+  std::vector<std::byte> wire(header.begin(), header.end());
+  // 4-byte extras prefix
+  wire.insert(wire.end(), 4, std::byte{ 0x7f });
+  for (const auto b : snappy_payload) {
+    wire.push_back(static_cast<std::byte>(b));
+  }
+
+  mcbp_parser parser;
+  parser.feed(wire.begin(), wire.end());
+
+  mcbp_message msg{};
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "snappy frame parses and decompresses");
+  assert_eq(couchbase::core::utils::network_to_host(msg.header.bodylen),
+            std::uint32_t{ 4 + 20 },
+            "header bodylen is patched with uncompressed size");
+  assert_eq(msg.body.size(), std::size_t{ 4 + 20 }, "4-byte extras + 20-byte uncompressed payload");
+  for (std::size_t i = 0; i < 4; ++i) {
+    assert_eq(msg.body[i], std::byte{ 0x7f }, "extras prefix is preserved");
+  }
+  const std::array<char, 4> pattern{ 'A', 'B', 'C', 'D' };
+  for (std::size_t i = 0; i < 20; ++i) {
+    assert_eq(msg.body[4 + i], static_cast<std::byte>(pattern[i % 4]), "decompressed byte matches");
+  }
+}
+
+void
+a_snappy_frame_after_another_frame_is_decompressed_from_its_own_offset(
+  [[maybe_unused]] context& ctx)
+{
+  // The Snappy frame starts at a non-zero read offset. Reading its prefix or its compressed bytes
+  // from the start of the buffer instead picks up the plain frame before it.
+  auto plain = frame_builder{}
+                 .magic_byte(magic::client_response)
+                 .opcode(0x00)
+                 .keylen(0)
+                 .extlen(4)
+                 .bodylen(8)
+                 .opaque(1)
+                 .bytes;
+  std::vector<std::byte> wire(plain.begin(), plain.end());
+  wire.insert(wire.end(), 8, std::byte{ 0x11 });
+
+  const std::array<std::uint8_t, 9> snappy_payload{
+    0x14, 0x0c, 'A', 'B', 'C', 'D', 0x3e, 0x04, 0x00,
+  };
+  auto compressed = frame_builder{}
+                      .magic_byte(magic::client_response)
+                      .opcode(0x00)
+                      .keylen(0)
+                      .extlen(4)
+                      .datatype(0x03) // JSON (0x01) | Snappy (0x02)
+                      .bodylen(4 + static_cast<std::uint32_t>(snappy_payload.size()))
+                      .opaque(2)
+                      .bytes;
+  wire.insert(wire.end(), compressed.begin(), compressed.end());
+  wire.insert(wire.end(), 4, std::byte{ 0x7f });
+  for (const auto b : snappy_payload) {
+    wire.push_back(static_cast<std::byte>(b));
+  }
+
+  mcbp_parser parser;
+  parser.feed(wire.begin(), wire.end());
+
+  mcbp_message msg{};
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "the plain frame parses");
+  assert_eq(msg.header.opaque, std::uint32_t{ 1 }, "the plain frame comes first");
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "the Snappy frame parses");
+  assert_eq(msg.header.opaque, std::uint32_t{ 2 }, "the Snappy frame comes second");
+  assert_eq(couchbase::core::utils::network_to_host(msg.header.bodylen),
+            std::uint32_t{ 4 + 20 },
+            "bodylen is patched with the uncompressed size");
+  assert_eq(msg.body.size(), std::size_t{ 4 + 20 }, "4-byte extras and 20 uncompressed bytes");
+  for (std::size_t i = 0; i < 4; ++i) {
+    assert_eq(msg.body[i], std::byte{ 0x7f }, "the extras are the Snappy frame's own");
+  }
+  const std::array<char, 4> pattern{ 'A', 'B', 'C', 'D' };
+  for (std::size_t i = 0; i < 20; ++i) {
+    assert_eq(msg.body[4 + i], static_cast<std::byte>(pattern[i % 4]), "decompressed byte matches");
+  }
+}
+
+void
+corrupted_snappy_frame_falls_back_to_raw_body([[maybe_unused]] context& ctx)
+{
+  auto header = frame_builder{}
+                  .magic_byte(magic::client_response)
+                  .opcode(0x00)
+                  .keylen(0)
+                  .extlen(2)
+                  .datatype(0x02) // Snappy
+                  .bodylen(6)
+                  .bytes;
+
+  std::vector<std::byte> wire(header.begin(), header.end());
+  wire.insert(wire.end(), 2, std::byte{ 0xaa }); // 2-byte extras
+  // Valid Snappy uncompressed-length varint (0x40 == 64 bytes) so snappy::GetUncompressedLength
+  // succeeds and resizes msg.body to 2 + 64 = 66 bytes, followed by a truncated literal tag
+  // (0x1c == 8-byte literal, with only 2 bytes remaining) so snappy::RawUncompress fails and
+  // exercises msg.body.clear() before copying the 6 raw frame bytes.
+  wire.push_back(std::byte{ 0x40 });
+  wire.push_back(std::byte{ 0x1c });
+  wire.push_back(std::byte{ 0xde });
+  wire.push_back(std::byte{ 0xad });
+
+  mcbp_parser parser;
+  parser.feed(wire.begin(), wire.end());
+
+  mcbp_message msg{};
+  assert_eq(parser.next(msg),
+            mcbp_parser::result::ok,
+            "corrupted snappy payload falls back to raw frame bytes");
+  assert_eq(couchbase::core::utils::network_to_host(msg.header.bodylen),
+            std::uint32_t{ 6 },
+            "header bodylen remains raw frame length on fallback");
+  assert_eq(msg.body.size(),
+            std::size_t{ 6 },
+            "resized 66-byte buffer is cleared and raw 6-byte body is preserved");
+  assert_eq(msg.body[0], std::byte{ 0xaa }, "extras preserved on fallback");
+  assert_eq(msg.body[1], std::byte{ 0xaa }, "extras preserved on fallback");
+  assert_eq(msg.body[2], std::byte{ 0x40 }, "raw varint byte preserved on fallback");
+  assert_eq(msg.body[3], std::byte{ 0x1c }, "raw tag byte preserved on fallback");
+  assert_eq(msg.body[4], std::byte{ 0xde }, "raw payload byte preserved on fallback");
+  assert_eq(msg.body[5], std::byte{ 0xad }, "raw payload byte preserved on fallback");
+}
+void
+every_split_of_a_mixed_stream_into_three_reads_parses_like_one_read([[maybe_unused]] context& ctx)
+{
+  // Frames: extras + body, header only, Snappy, flexible framing, Snappy with an unreadable
+  // length (raw fallback), plain. Every pair of split points feeds the stream in three reads,
+  // checking each message and that a need_data return leaves only the unparsed bytes.
+  std::vector<std::byte> wire;
+  std::vector<std::size_t> frame_ends;
+  auto add = [&](frame_builder b, std::vector<std::uint8_t> body) {
+    b.bodylen(static_cast<std::uint32_t>(body.size()));
+    wire.insert(wire.end(), b.bytes.begin(), b.bytes.end());
+    for (auto v : body) {
+      wire.push_back(static_cast<std::byte>(v));
+    }
+    frame_ends.push_back(wire.size());
+  };
+  add(frame_builder{}.magic_byte(magic::client_response).extlen(4).opaque(1),
+      { 1, 1, 1, 1, 2, 2, 2, 2 });
+  add(frame_builder{}.magic_byte(magic::client_response).opaque(2), {});
+  add(frame_builder{}.magic_byte(magic::client_response).extlen(4).datatype(0x02).opaque(3),
+      { 0x7f, 0x7f, 0x7f, 0x7f, 0x14, 0x0c, 'A', 'B', 'C', 'D', 0x3e, 0x04, 0x00 });
+  add(
+    frame_builder{}.magic_byte(magic::alt_client_response).set(2, 3).set(3, 2).extlen(1).opaque(4),
+    { 9, 9, 9, 8, 7, 7, 5, 5, 5, 5 });
+  add(frame_builder{}.magic_byte(magic::client_response).datatype(0x02).opaque(5),
+      { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff });
+  add(frame_builder{}.magic_byte(magic::client_response).opaque(6), { 3, 3, 3 });
+
+  struct parsed {
+    std::uint32_t opaque;
+    std::uint32_t bodylen;
+    std::vector<std::byte> body;
+  };
+  auto parse = [&](const std::vector<std::size_t>& cuts) {
+    std::vector<parsed> out;
+    mcbp_parser parser;
+    std::size_t from = 0;
+    for (const auto to : cuts) {
+      parser.feed(wire.begin() + static_cast<std::ptrdiff_t>(from),
+                  wire.begin() + static_cast<std::ptrdiff_t>(to));
+      for (;;) {
+        mcbp_message msg{};
+        const auto res = parser.next(msg);
+        if (res == mcbp_parser::result::need_data) {
+          break;
+        }
+        assert_eq(res, mcbp_parser::result::ok, "every frame parses");
+        out.push_back({ msg.header.opaque,
+                        couchbase::core::utils::network_to_host(msg.header.bodylen),
+                        msg.body });
+      }
+      const std::size_t consumed = out.empty() ? 0 : frame_ends[out.size() - 1];
+      assert_eq(parser.read_offset_, std::size_t{ 0 }, "need_data leaves no read offset");
+      assert_eq(parser.buf.size(), to - consumed, "need_data keeps only the unparsed bytes");
+      from = to;
+    }
+    return out;
+  };
+
+  const auto expected = parse({ wire.size() });
+  assert_eq(expected.size(), frame_ends.size(), "one read yields every frame");
+  assert_eq(expected[1].body.size(), std::size_t{ 0 }, "the header-only frame has no body");
+  assert_eq(expected[2].body.size(), std::size_t{ 4 + 20 }, "the Snappy frame is decompressed");
+  assert_eq(expected[3].body.size(), std::size_t{ 10 }, "the flexible frame keeps its whole body");
+  assert_eq(expected[4].body.size(), std::size_t{ 6 }, "the unreadable Snappy frame stays raw");
+  assert_eq(expected[4].bodylen, std::uint32_t{ 6 }, "its bodylen is not patched");
+  for (std::size_t i = 0; i <= wire.size(); ++i) {
+    for (std::size_t j = i; j <= wire.size(); ++j) {
+      const auto got = parse({ i, j, wire.size() });
+      assert_eq(got.size(), expected.size(), "every split yields every frame");
+      for (std::size_t k = 0; k < got.size(); ++k) {
+        assert_eq(got[k].opaque, expected[k].opaque, "frames arrive in order");
+        assert_eq(got[k].bodylen, expected[k].bodylen, "bodylen matches one read");
+        assert_true(got[k].body == expected[k].body, "body matches one read");
+      }
+    }
+  }
+}
 } // namespace
 
 auto
@@ -225,6 +546,12 @@ tests() -> test_suite
       { CASE(a_well_formed_frame_is_accepted) },
       { CASE(alt_sizes_splits_the_two_one_byte_header_fields) },
       { CASE(a_large_frame_fed_in_socket_reads_is_copied_a_bounded_number_of_times) },
+      { CASE(pipelined_frames_in_a_single_chunk_and_straddling_chunks_are_parsed_in_order) },
+      { CASE(bytes_with_invalid_magic_after_a_frame_are_discarded) },
+      { CASE(snappy_compressed_frame_is_decompressed_in_place_preserving_prefix) },
+      { CASE(a_snappy_frame_after_another_frame_is_decompressed_from_its_own_offset) },
+      { CASE(corrupted_snappy_frame_falls_back_to_raw_body) },
+      { CASE(every_split_of_a_mixed_stream_into_three_reads_parses_like_one_read) },
     },
   };
 }
