@@ -21,22 +21,28 @@
 #include "core/impl/error.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/subdoc/path_flags.hxx"
+#include "core/io/mcbp_command.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_upsert.hxx"
 #include "core/protocol/client_response.hxx"
 #include "core/protocol/cmd_lookup_in.hxx"
 #include "core/protocol/cmd_lookup_in_replica.hxx"
 #include "core/protocol/cmd_mutate_in.hxx"
+#include "core/protocol/datatype.hxx"
 #include "core/protocol/magic.hxx"
 #include "core/utils/byteswap.hxx"
 #include "core/utils/json.hxx"
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 
 #include <couchbase/store_semantics.hxx>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -556,6 +562,157 @@ a_mutate_in_retry_sends_the_binary_flag_only_to_nodes_that_support_it([[maybe_un
       .specs();
   assert_binary_flag_follows_the_node(req);
 }
+
+// Wire bytes of one dispatch from encode_for_dispatch(), which mcbp_command::send() calls for every
+// dispatch.
+template<typename Request>
+auto
+dispatch(Request& req, std::uint64_t features) -> std::vector<std::byte>
+{
+  auto [ec, data] = couchbase::core::operations::encode_for_dispatch(
+    req, { std::nullopt, features }, std::chrono::milliseconds{ 2'500 });
+  assert_success(ec, "the dispatch encodes");
+  return data;
+}
+
+// Its encoded form returns a buffer whose address it records.
+struct buffer_recording_request {
+  inline static const std::byte* returned{ nullptr };
+
+  struct encoded_request_type {
+    [[nodiscard]] auto data(bool /* try_to_compress */) const -> std::vector<std::byte>
+    {
+      std::vector<std::byte> bytes(4096, std::byte{ 0x5a });
+      returned = bytes.data();
+      return bytes;
+    }
+  };
+
+  [[nodiscard]] auto encode_to(encoded_request_type& /* encoded */,
+                               couchbase::core::mcbp_context&& /* context */) const
+    -> std::error_code
+  {
+    return {};
+  }
+};
+
+void
+the_encoded_bytes_are_moved_out_of_the_encoded_request([[maybe_unused]] context& ctx)
+{
+  buffer_recording_request req{};
+  const auto [ec, wire] = couchbase::core::operations::encode_for_dispatch(
+    req, { std::nullopt, 0 }, std::chrono::milliseconds{ 2'500 });
+  assert_success(ec, "the dispatch encodes");
+  assert_eq(wire.size(), std::size_t{ 4096 }, "the encoded bytes");
+  assert_true(wire.data() == buffer_recording_request::returned, "the buffer is not copied");
+}
+
+constexpr std::size_t header_size{ 24 };
+constexpr std::size_t framing_extras_length_offset{ 2 };
+constexpr std::size_t extras_length_offset{ 4 };
+// mutate_in extras: the expiry, then the user flags.
+constexpr std::size_t expiry_size{ sizeof(std::uint32_t) };
+
+auto
+extras_length(const std::vector<std::byte>& wire) -> std::size_t
+{
+  return std::to_integer<std::size_t>(wire.at(extras_length_offset));
+}
+
+void
+a_mutate_in_retry_sends_the_user_flags_only_to_nodes_that_support_them(
+  [[maybe_unused]] context& ctx)
+{
+  const auto binary_xattr = couchbase::core::feature_mask_bit(
+    couchbase::core::protocol::hello_feature::subdoc_binary_xattr);
+  mutate_in_request req{ { "default", "_default", "_default", "doc" } };
+  req.flags = 0x01020304;
+  // The expiry makes the first dispatch encode extras, which a reused body would resend.
+  req.expiry = 3600;
+  req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("x", 42) }.specs();
+
+  assert_eq(extras_length(dispatch(req, 0)), std::size_t{ 4 }, "the expiry alone");
+  const auto wire = dispatch(req, binary_xattr);
+  assert_eq(extras_length(wire), std::size_t{ 8 }, "the expiry and the user flags");
+  const std::vector<std::byte> user_flags{ wire.begin() + header_size + expiry_size,
+                                           wire.begin() + header_size + 2 * expiry_size };
+  assert_eq(
+    user_flags,
+    std::vector<std::byte>{ std::byte{ 1 }, std::byte{ 2 }, std::byte{ 3 }, std::byte{ 4 } },
+    "the user flags, in network order");
+  assert_eq(extras_length(dispatch(req, 0)), std::size_t{ 4 }, "the expiry alone again");
+}
+
+// Past the dispatch whose accumulated frames would no longer fit the one-byte length.
+constexpr int dispatches_past_the_length_byte{ 64 };
+
+template<typename Request>
+void
+assert_each_dispatch_carries_one_frame_of_each_kind(Request& req)
+{
+  req.durability_level = couchbase::durability_level::majority;
+  req.preserve_expiry = true;
+  for (int i = 0; i < dispatches_past_the_length_byte; ++i) {
+    const auto wire = dispatch(req, 0);
+    assert_eq(static_cast<couchbase::core::protocol::magic>(wire.at(0)),
+              couchbase::core::protocol::magic::alt_client_request,
+              "framing extras are present");
+    // A durability frame with a timeout takes 4 bytes, a preserve-expiry frame 1.
+    assert_eq(std::to_integer<std::size_t>(wire.at(framing_extras_length_offset)),
+              std::size_t{ 5 },
+              "one durability frame and one preserve-expiry frame");
+  }
+}
+
+void
+each_dispatch_of_a_durable_mutate_in_carries_one_frame_of_each_kind([[maybe_unused]] context& ctx)
+{
+  mutate_in_request req{ { "default", "_default", "_default", "doc" } };
+  req.specs =
+    couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("count", 1) }.specs();
+  assert_each_dispatch_carries_one_frame_of_each_kind(req);
+}
+
+void
+each_dispatch_of_a_durable_replace_carries_one_frame_of_each_kind([[maybe_unused]] context& ctx)
+{
+  couchbase::core::operations::replace_request req{ { "default", "_default", "_default", "doc" },
+                                                    couchbase::core::utils::to_binary("{}") };
+  assert_each_dispatch_carries_one_frame_of_each_kind(req);
+}
+
+void
+each_dispatch_of_a_durable_upsert_carries_one_frame_of_each_kind([[maybe_unused]] context& ctx)
+{
+  couchbase::core::operations::upsert_request req{ { "default", "_default", "_default", "doc" },
+                                                   couchbase::core::utils::to_binary("{}") };
+  assert_each_dispatch_carries_one_frame_of_each_kind(req);
+}
+void
+a_value_is_compressed_only_for_a_node_with_snappy([[maybe_unused]] context& ctx)
+{
+  constexpr std::size_t datatype_offset{ 5 };
+  const auto snappy_bit = static_cast<std::uint8_t>(couchbase::core::protocol::datatype::snappy);
+  const std::string value(4096, 'a');
+  couchbase::core::operations::upsert_request req{ { "default", "_default", "_default", "doc" },
+                                                   couchbase::core::utils::to_binary(value) };
+
+  const auto plain = dispatch(req, 0);
+  assert_eq(std::to_integer<std::uint8_t>(plain.at(datatype_offset)) & snappy_bit,
+            0,
+            "no snappy datatype without snappy support");
+  assert_eq(std::string(reinterpret_cast<const char*>(plain.data() + plain.size() - value.size()),
+                        value.size()),
+            value,
+            "the value is sent as is");
+
+  const auto compressed = dispatch(
+    req, couchbase::core::feature_mask_bit(couchbase::core::protocol::hello_feature::snappy));
+  assert_eq(std::to_integer<std::uint8_t>(compressed.at(datatype_offset)) & snappy_bit,
+            int{ snappy_bit },
+            "the snappy datatype with snappy support");
+  assert_true(compressed.size() < plain.size(), "the value is compressed");
+}
 } // namespace
 
 auto
@@ -595,6 +752,20 @@ tests() -> test_suite
         {},
         timeout::instant },
       { CASE(a_mutate_in_retry_sends_the_binary_flag_only_to_nodes_that_support_it),
+        {},
+        timeout::instant },
+      { CASE(the_encoded_bytes_are_moved_out_of_the_encoded_request), {}, timeout::instant },
+      { CASE(a_value_is_compressed_only_for_a_node_with_snappy), {}, timeout::instant },
+      { CASE(a_mutate_in_retry_sends_the_user_flags_only_to_nodes_that_support_them),
+        {},
+        timeout::instant },
+      { CASE(each_dispatch_of_a_durable_mutate_in_carries_one_frame_of_each_kind),
+        {},
+        timeout::instant },
+      { CASE(each_dispatch_of_a_durable_replace_carries_one_frame_of_each_kind),
+        {},
+        timeout::instant },
+      { CASE(each_dispatch_of_a_durable_upsert_carries_one_frame_of_each_kind),
         {},
         timeout::instant },
     },
