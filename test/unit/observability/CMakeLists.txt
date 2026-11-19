@@ -1,5 +1,11 @@
 couchbase_add_test(unit/observability/app_telemetry_meter LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/app_telemetry_reporter LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/observability/boolean_span_attributes LABEL unit LINK_CLIENT)
+if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+  target_include_directories(
+    unit_observability_boolean_span_attributes SYSTEM
+    PRIVATE $<TARGET_PROPERTY:opentelemetry_api,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 couchbase_add_test(unit/observability/diagnostics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger_fork LABEL unit LINK_CLIENT)

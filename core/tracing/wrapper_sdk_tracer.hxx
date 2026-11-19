@@ -44,9 +44,13 @@ private:
   std::shared_ptr<noop_span> noop_instance_{ std::make_shared<noop_span>() };
 };
 
-class wrapper_sdk_span : public couchbase::tracing::request_span
+class wrapper_sdk_span
+  : public couchbase::tracing::request_span
+  , public couchbase::tracing::boolean_tag_request_span
 {
 public:
+  using couchbase::tracing::request_span::add_tag;
+
   wrapper_sdk_span() = default;
   explicit wrapper_sdk_span(std::string name);
   wrapper_sdk_span(std::string name,
@@ -56,11 +60,13 @@ public:
 
   void add_tag(const std::string& name, std::uint64_t value) override;
   void add_tag(const std::string& name, const std::string& value) override;
+  void add_bool_tag(const std::string& name, bool value) override;
 
   void end() override;
 
   [[nodiscard]] auto uint_tags() const -> const std::map<std::string, std::uint64_t>&;
   [[nodiscard]] auto string_tags() const -> const std::map<std::string, std::string>&;
+  [[nodiscard]] auto bool_tags() const -> const std::map<std::string, bool>&;
   [[nodiscard]] auto children() -> std::vector<std::shared_ptr<wrapper_sdk_span>>;
   [[nodiscard]] auto start_time() const -> const std::chrono::system_clock::time_point&;
   [[nodiscard]] auto end_time() const -> const std::chrono::system_clock::time_point&;
@@ -70,6 +76,7 @@ public:
 private:
   std::map<std::string, std::uint64_t> uint_tags_{};
   std::map<std::string, std::string> string_tags_{};
+  std::map<std::string, bool> bool_tags_{};
   std::chrono::system_clock::time_point start_time_{ std::chrono::system_clock::now() };
   std::chrono::system_clock::time_point end_time_{};
 

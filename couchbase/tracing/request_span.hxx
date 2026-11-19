@@ -20,6 +20,7 @@
 #include <cinttypes>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 namespace couchbase::tracing
 {
@@ -44,6 +45,9 @@ public:
   }
   virtual void add_tag(const std::string& name, std::uint64_t value) = 0;
   virtual void add_tag(const std::string& name, const std::string& value) = 0;
+
+  template<typename T, std::enable_if_t<std::is_same_v<std::remove_cv_t<T>, bool>, int> = 0>
+  void add_tag(const std::string& name, T value);
   /**
    * SDK invokes this method when the span finishes. It runs on an SDK I/O thread or on an
    * application thread. That includes the thread about to deliver an operation's result or
@@ -117,4 +121,31 @@ private:
   std::string name_{};
   std::shared_ptr<request_span> parent_{ nullptr };
 };
+
+class boolean_tag_request_span
+{
+public:
+  boolean_tag_request_span() = default;
+  boolean_tag_request_span(const boolean_tag_request_span& other) = default;
+  boolean_tag_request_span(boolean_tag_request_span&& other) = default;
+  auto operator=(const boolean_tag_request_span& other) -> boolean_tag_request_span& = default;
+  auto operator=(boolean_tag_request_span&& other) -> boolean_tag_request_span& = default;
+  virtual ~boolean_tag_request_span() = default;
+
+  virtual void add_bool_tag(const std::string& name, bool value) = 0;
+};
+
+template<typename T, std::enable_if_t<std::is_same_v<std::remove_cv_t<T>, bool>, int>>
+inline void
+request_span::add_tag(const std::string& name, T value)
+{
+  if (!uses_tags()) {
+    return;
+  }
+  if (auto* bool_span = dynamic_cast<boolean_tag_request_span*>(this); bool_span != nullptr) {
+    bool_span->add_bool_tag(name, value);
+  } else {
+    add_tag(name, value ? std::uint64_t{ 1 } : std::uint64_t{ 0 });
+  }
+}
 } // namespace couchbase::tracing
