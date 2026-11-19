@@ -23,6 +23,7 @@
 #include "custom_rotating_file_sink.hxx"
 
 #include "core/platform/dirutils.h"
+#include "core/utils/no_destructor.hxx"
 
 #include <algorithm>
 #include <exception>
@@ -80,8 +81,8 @@ auto
 live_sinks_of() -> live_sinks<Sink>&
 {
   // never destroyed: a sink owned by another static can be destroyed after it
-  static auto* registry = new live_sinks<Sink>(); // NOLINT(cppcoreguidelines-owning-memory)
-  return *registry;
+  static couchbase::core::utils::no_destructor<live_sinks<Sink>> registry{};
+  return registry.get();
 }
 } // namespace
 
