@@ -1,0 +1,16 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 96e4481: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 5 added types
+
+5 added types unreachable from any public interface:
+
+  [A] 'class couchbase::core::utils::no_destructor<(anonymous namespace)::live_sinks<custom_rotating_file_sink<spdlog::details::null_mutex> > >' at no_destructor.hxx:34:1
+  [A] 'class couchbase::core::utils::no_destructor<(anonymous namespace)::live_sinks<custom_rotating_file_sink<std::mutex> > >' at no_destructor.hxx:34:1
+  [A] 'struct sdk_thread_pool_exit' at logger.cxx:284:1
+  [A] 'struct std::__array_traits<std::byte,40>' at array:61:1
+  [A] 'struct std::__array_traits<std::byte,88>' at array:61:1
+
