@@ -23,7 +23,13 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
+
+namespace couchbase::core::topology
+{
+struct configuration;
+} // namespace couchbase::core::topology
 
 namespace couchbase::core::io
 {
@@ -40,6 +46,13 @@ public:
 
   // The requests written before the session bootstrapped, as wire frames, in the order written.
   [[nodiscard]] auto pending_frames() const -> std::vector<std::vector<std::byte>>;
+
+  // Installs a configuration as the server's would, so that has_config() holds without a bootstrap.
+  void update_configuration(topology::configuration config) const;
+
+  // Sets the address bootstrap_address() reports, which a bootstrap assigns, without starting one.
+  // Set before the session is used across threads.
+  void set_bootstrap_address(std::string address) const;
 
   // Routes a response frame with this opcode, status and opaque to its subscription, as the read
   // loop does for a frame from the socket. Returns false when nothing is subscribed under opaque.

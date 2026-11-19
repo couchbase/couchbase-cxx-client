@@ -1216,6 +1216,12 @@ public:
     return { {}, connect_session(index) };
   }
 
+  void add_session(std::size_t index, io::mcbp_session session)
+  {
+    const std::scoped_lock lock(sessions_mutex_);
+    sessions_.insert_or_assign(index, std::move(session));
+  }
+
   [[nodiscard]] auto next_session_index() -> std::size_t
   {
     const std::shared_lock lock(sessions_mutex_);
@@ -1591,6 +1597,12 @@ auto
 bucket_unit_test_api::next_session_index() -> std::size_t
 {
   return impl_->next_session_index();
+}
+
+void
+bucket_unit_test_api::add_session(std::size_t index, io::mcbp_session session)
+{
+  impl_->add_session(index, std::move(session));
 }
 
 auto

@@ -30,6 +30,11 @@ namespace couchbase::core
 {
 class bucket_impl;
 
+namespace io
+{
+class mcbp_session;
+} // namespace io
+
 namespace mcbp
 {
 class queue_request;
@@ -49,6 +54,10 @@ public:
                         std::optional<key_value_error_map_info> error_info);
 
   [[nodiscard]] auto next_session_index() -> std::size_t;
+
+  // Registers a session under this index, as a completed bootstrap does, so that map_and_send() can
+  // route to a session the test drives.
+  void add_session(std::size_t index, io::mcbp_session session);
 
 private:
   friend class bucket;

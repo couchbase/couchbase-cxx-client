@@ -182,6 +182,8 @@ struct stub_command {
   std::optional<stub_session> session_{ stub_session{} };
   std::optional<std::string> last_dispatched_to_{ "127.0.0.1:11210" };
   std::optional<std::string> last_dispatched_from_{ "127.0.0.1:54321" };
+  // A completion that observed a published attempt.
+  bool attempt_readable_{ true };
   mutable std::string id_{};
 
   [[nodiscard]] auto id() const -> const std::string&
@@ -189,6 +191,11 @@ struct stub_command {
     if (id_.empty()) {
       id_ = core::operations::make_command_id(core::protocol::client_opcode::get);
     }
+    return id_;
+  }
+
+  [[nodiscard]] auto built_id() const -> std::string
+  {
     return id_;
   }
 };
