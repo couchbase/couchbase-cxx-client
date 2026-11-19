@@ -47,6 +47,8 @@ public:
     -> std::shared_ptr<couchbase::tracing::request_span>;
   [[nodiscard]] auto record_suboperation(std::string subop_name) const
     -> std::unique_ptr<observability_recorder>;
+  [[nodiscard]] auto record_tracing_suboperation(std::string subop_name) const
+    -> std::unique_ptr<observability_recorder>;
 
   void with_service(const std::string& service);
   void with_collection_name(const std::string& collection_name);

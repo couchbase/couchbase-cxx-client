@@ -83,6 +83,13 @@ observability_recorder::record_suboperation(std::string subop_name) const
   return create(std::move(subop_name), span_, tracer_, meter_);
 }
 
+auto
+observability_recorder::record_tracing_suboperation(std::string subop_name) const
+  -> std::unique_ptr<observability_recorder>
+{
+  return create(std::move(subop_name), span_, tracer_, {});
+}
+
 void
 observability_recorder::with_service(const std::string& service)
 {

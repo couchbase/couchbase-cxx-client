@@ -25,7 +25,6 @@
 #include "core/operations/management/query_index_drop.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 #include "core/tracing/constants.hxx"
-#include "core/tracing/tracer_wrapper.hxx"
 
 #include <couchbase/collection_query_index_manager.hxx>
 #include <couchbase/query_index_manager.hxx>
@@ -41,6 +40,23 @@ namespace couchbase
 {
 namespace
 {
+[[nodiscard]] auto
+create_query_suboperation_observability_recorder(
+  const std::string& bucket_name,
+  const std::string& scope_name,
+  const std::string& collection_name,
+  const std::unique_ptr<core::impl::observability_recorder>& parent_recorder)
+  -> std::unique_ptr<core::impl::observability_recorder>
+{
+  auto rec = parent_recorder->record_tracing_suboperation(core::tracing::operation::query);
+  rec->with_service(core::tracing::service::query);
+  if (!collection_name.empty()) {
+    rec->with_bucket_name(bucket_name);
+    rec->with_scope_name(scope_name);
+  }
+  return rec;
+}
+
 class watch_context : public std::enable_shared_from_this<watch_context>
 {
 
@@ -108,8 +124,19 @@ public:
 
   void execute()
   {
+    const auto [origin_ec, origin] = core_.origin();
+    if (origin_ec) {
+      core::operations::management::query_index_get_all_response resp{};
+      finish(resp, origin_ec);
+      return;
+    }
+
     auto get_all_obs_rec = create_suboperation_observability_recorder(
       core::tracing::operation::mgr_query_get_all_indexes, observability_recorder_);
+    auto query_obs_rec = origin.uses_protostellar()
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name_, scope_name_, collection_name_, get_all_obs_rec);
     core::operations::management::query_index_get_all_request get_all_request{
       bucket_name_,
       scope_name_,
@@ -117,20 +144,24 @@ public:
       {},
       {},
       remaining(),
-      get_all_obs_rec->operation_span(),
+      query_obs_rec ? query_obs_rec->operation_span() : get_all_obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(get_all_request),
-      [ctx = shared_from_this(), get_all_obs_rec = std::move(get_all_obs_rec)](auto resp) {
-        get_all_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        if (ctx->check(resp)) {
-          ctx->finish(resp, {});
-        } else if (ctx->remaining().count() <= 0) {
-          ctx->finish(resp, couchbase::errc::common::ambiguous_timeout);
-        } else {
-          ctx->poll();
-        }
-      });
+    return core_.execute(std::move(get_all_request),
+                         [ctx = shared_from_this(),
+                          get_all_obs_rec = std::move(get_all_obs_rec),
+                          query_obs_rec = std::move(query_obs_rec)](auto resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
+                           get_all_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           if (ctx->check(resp)) {
+                             ctx->finish(resp, {});
+                           } else if (ctx->remaining().count() <= 0) {
+                             ctx->finish(resp, couchbase::errc::common::ambiguous_timeout);
+                           } else {
+                             ctx->poll();
+                           }
+                         });
   }
 
 private:
@@ -262,12 +293,29 @@ public:
                                     collection_name,
                                     options.parent_span);
 
+    const auto [origin_ec, origin] = core_.origin();
+    auto query_obs_rec = (origin_ec || origin.uses_protostellar())
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name, scope_name, collection_name, obs_rec);
+
     core::operations::management::query_index_get_all_request request{
-      bucket_name, scope_name, collection_name, {}, {}, options.timeout, obs_rec->operation_span(),
+      bucket_name,
+      scope_name,
+      collection_name,
+      {},
+      {},
+      options.timeout,
+      query_obs_rec ? query_obs_rec->operation_span() : obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
-                         [obs_rec = std::move(obs_rec), handler = std::move(handler)](
+                         [obs_rec = std::move(obs_rec),
+                          query_obs_rec = std::move(query_obs_rec),
+                          handler = std::move(handler)](
                            const core::operations::management::query_index_get_all_response& resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
                            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                            if (resp.ctx.ec) {
                              return handler(core::impl::make_error(resp.ctx), {});
@@ -290,6 +338,12 @@ public:
                                                  collection_name,
                                                  options.parent_span);
 
+    const auto [origin_ec, origin] = core_.origin();
+    auto query_obs_rec = (origin_ec || origin.uses_protostellar())
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name, scope_name, collection_name, obs_rec);
+
     core::operations::management::query_index_create_request request{
       bucket_name,
       scope_name,
@@ -304,14 +358,18 @@ public:
       options.num_replicas,
       {},
       options.timeout,
-      obs_rec->operation_span(),
+      query_obs_rec ? query_obs_rec->operation_span() : obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        handler(core::impl::make_error(resp.ctx));
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          query_obs_rec = std::move(query_obs_rec),
+                          handler = std::move(handler)](const auto& resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           handler(core::impl::make_error(resp.ctx));
+                         });
   }
 
   void create_primary_index(const std::string& bucket_name,
@@ -327,6 +385,12 @@ public:
                                     collection_name,
                                     options.parent_span);
 
+    const auto [origin_ec, origin] = core_.origin();
+    auto query_obs_rec = (origin_ec || origin.uses_protostellar())
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name, scope_name, collection_name, obs_rec);
+
     core::operations::management::query_index_create_request request{
       bucket_name,
       scope_name,
@@ -341,14 +405,18 @@ public:
       options.num_replicas,
       {},
       options.timeout,
-      obs_rec->operation_span(),
+      query_obs_rec ? query_obs_rec->operation_span() : obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        handler(core::impl::make_error(resp.ctx));
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          query_obs_rec = std::move(query_obs_rec),
+                          handler = std::move(handler)](const auto& resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           handler(core::impl::make_error(resp.ctx));
+                         });
   }
 
   void drop_index(const std::string& bucket_name,
@@ -364,6 +432,12 @@ public:
                                                  collection_name,
                                                  options.parent_span);
 
+    const auto [origin_ec, origin] = core_.origin();
+    auto query_obs_rec = (origin_ec || origin.uses_protostellar())
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name, scope_name, collection_name, obs_rec);
+
     core::operations::management::query_index_drop_request request{
       bucket_name,
       scope_name,
@@ -374,14 +448,18 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      obs_rec->operation_span(),
+      query_obs_rec ? query_obs_rec->operation_span() : obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        handler(core::impl::make_error(resp.ctx));
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          query_obs_rec = std::move(query_obs_rec),
+                          handler = std::move(handler)](const auto& resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           handler(core::impl::make_error(resp.ctx));
+                         });
   }
 
   void drop_primary_index(const std::string& bucket_name,
@@ -397,6 +475,12 @@ public:
                                     collection_name,
                                     options.parent_span);
 
+    const auto [origin_ec, origin] = core_.origin();
+    auto query_obs_rec = (origin_ec || origin.uses_protostellar())
+                           ? nullptr
+                           : create_query_suboperation_observability_recorder(
+                               bucket_name, scope_name, collection_name, obs_rec);
+
     core::operations::management::query_index_drop_request request{
       bucket_name,
       scope_name,
@@ -407,11 +491,16 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      obs_rec->operation_span(),
+      query_obs_rec ? query_obs_rec->operation_span() : obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
-                         [obs_rec = std::move(obs_rec), handler = std::move(handler)](
+                         [obs_rec = std::move(obs_rec),
+                          query_obs_rec = std::move(query_obs_rec),
+                          handler = std::move(handler)](
                            const core::operations::management::query_index_drop_response& resp) {
+                           if (query_obs_rec) {
+                             query_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           }
                            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                            handler(core::impl::make_error(resp.ctx));
                          });
@@ -471,6 +560,8 @@ public:
       scope_name,
       collection_name,
       top_obs_rec);
+    auto get_all_query_obs_rec = create_query_suboperation_observability_recorder(
+      bucket_name, scope_name, collection_name, get_all_deferred_obs_rec);
 
     core::operations::management::query_index_get_all_deferred_request get_all_deferred_request{
       bucket_name,
@@ -479,7 +570,7 @@ public:
       {},
       {},
       options.timeout,
-      get_all_deferred_obs_rec->operation_span(),
+      get_all_query_obs_rec->operation_span(),
     };
 
     return core_.execute(
@@ -489,9 +580,11 @@ public:
        scope = scope_name,
        collection = collection_name,
        timeout,
+       get_all_query_obs_rec = std::move(get_all_query_obs_rec),
        get_all_deferred_obs_rec = std::move(get_all_deferred_obs_rec),
        top_obs_rec = std::move(top_obs_rec),
        handler = std::move(handler)](auto list_resp) mutable {
+        get_all_query_obs_rec->finish(list_resp.ctx.retry_attempts, list_resp.ctx.ec);
         get_all_deferred_obs_rec->finish(list_resp.ctx.retry_attempts, list_resp.ctx.ec);
         if (list_resp.ctx.ec) {
           top_obs_rec->finish(list_resp.ctx.ec);
@@ -507,6 +600,8 @@ public:
           scope,
           collection,
           top_obs_rec);
+        auto build_query_obs_rec = create_query_suboperation_observability_recorder(
+          bucket, scope, collection, build_obs_rec);
         core::operations::management::query_index_build_request build_request{
           std::move(bucket),
           scope,
@@ -515,17 +610,19 @@ public:
           std::move(list_resp.index_names),
           {},
           timeout,
-          build_obs_rec->operation_span(),
+          build_query_obs_rec->operation_span(),
         };
-        self->core_.execute(std::move(build_request),
-                            [top_obs_rec = std::move(top_obs_rec),
-                             build_obs_rec = std::move(build_obs_rec),
-                             handler = std::move(handler)](const auto& build_resp) {
-                              build_obs_rec->finish(build_resp.ctx.retry_attempts,
-                                                    build_resp.ctx.ec);
-                              top_obs_rec->finish(build_resp.ctx.ec);
-                              return handler(core::impl::make_error(build_resp.ctx));
-                            });
+        self->core_.execute(
+          std::move(build_request),
+          [top_obs_rec = std::move(top_obs_rec),
+           build_obs_rec = std::move(build_obs_rec),
+           build_query_obs_rec = std::move(build_query_obs_rec),
+           handler = std::move(handler)](const auto& build_resp) {
+            build_query_obs_rec->finish(build_resp.ctx.retry_attempts, build_resp.ctx.ec);
+            build_obs_rec->finish(build_resp.ctx.retry_attempts, build_resp.ctx.ec);
+            top_obs_rec->finish(build_resp.ctx.ec);
+            return handler(core::impl::make_error(build_resp.ctx));
+          });
       });
   }
 

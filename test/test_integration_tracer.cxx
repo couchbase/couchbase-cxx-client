@@ -374,32 +374,22 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_compound_http_op_span_ok(
-  test::utils::integration_test_guard& guard,
-  const std::shared_ptr<test_span>& span,
-  const std::string& op,
-  const std::vector<std::pair<std::string, std::size_t>>& expected_sub_ops,
-  const std::optional<std::string>& expected_service,
-  const std::optional<std::string>& expected_bucket_name,
-  const std::optional<std::string>& expected_scope_name,
-  const std::optional<std::string>& expected_collection_name,
-  std::shared_ptr<test_span> parent = nullptr)
+assert_query_index_mgmt_op_span_ok(test::utils::integration_test_guard& guard,
+                                   const std::shared_ptr<test_span>& span,
+                                   const std::string& op,
+                                   const std::string& expected_bucket_name,
+                                   const std::optional<std::string>& expected_scope_name,
+                                   const std::optional<std::string>& expected_collection_name,
+                                   const std::shared_ptr<test_span>& parent = nullptr,
+                                   bool is_top_level_op_span = true)
 {
-  assert_span_ok(guard, span, true, parent);
+  assert_span_ok(guard, span, is_top_level_op_span, parent);
 
-  REQUIRE(span->name().find(op) != std::string::npos);
+  REQUIRE(span->name() == op);
   REQUIRE(span->string_tags()["db.operation.name"] == op);
-  REQUIRE(span->duration().count() > 0);
-  if (expected_service.has_value()) {
-    REQUIRE(span->string_tags()["couchbase.service"] == expected_service.value());
-  } else {
-    REQUIRE(span->string_tags().count("couchbase.service") == 0);
-  }
-  if (expected_bucket_name.has_value()) {
-    REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
-  } else {
-    REQUIRE(span->string_tags().count("db.namespace") == 0);
-  }
+  REQUIRE(span->int_tags().count("couchbase.retries") != 0);
+  REQUIRE(span->string_tags()["couchbase.service"] == "query");
+  REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name);
   if (expected_scope_name.has_value()) {
     REQUIRE(span->string_tags()["couchbase.scope.name"] == expected_scope_name.value());
   } else {
@@ -411,26 +401,78 @@ assert_compound_http_op_span_ok(
     REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
   }
 
-  for (const auto& [expected_sub_op, expected_sub_op_count] : expected_sub_ops) {
-    auto sub_op_spans = span->child_spans(expected_sub_op);
-    REQUIRE_FALSE(sub_op_spans.empty());
+  REQUIRE(span->child_spans("dispatch_to_server").empty());
+  const auto query_spans = span->child_spans("query");
+  REQUIRE(query_spans.size() == 1);
 
+  const auto query_span = query_spans.front().lock();
+  REQUIRE(query_span != nullptr);
+  assert_http_op_span_ok(guard,
+                         query_span,
+                         "query",
+                         "query",
+                         expected_collection_name.has_value()
+                           ? std::optional<std::string>{ expected_bucket_name }
+                           : std::nullopt,
+                         expected_scope_name,
+                         std::nullopt,
+                         span,
+                         false);
+  REQUIRE(query_span->string_tags().count("db.query.text") == 0);
+  REQUIRE(query_span->start() >= span->start());
+  REQUIRE(query_span->start() + query_span->duration() <= span->start() + span->duration());
+}
+
+void
+assert_compound_query_index_mgmt_op_span_ok(
+  test::utils::integration_test_guard& guard,
+  const std::shared_ptr<test_span>& span,
+  const std::string& op,
+  const std::vector<std::pair<std::string, std::size_t>>& expected_sub_ops,
+  const std::string& expected_bucket_name,
+  const std::optional<std::string>& expected_scope_name,
+  const std::optional<std::string>& expected_collection_name,
+  const std::shared_ptr<test_span>& parent = nullptr)
+{
+  assert_span_ok(guard, span, true, parent);
+
+  REQUIRE(span->name() == op);
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->string_tags()["couchbase.service"] == "query");
+  REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name);
+  if (expected_scope_name.has_value()) {
+    REQUIRE(span->string_tags()["couchbase.scope.name"] == expected_scope_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("couchbase.scope.name") == 0);
+  }
+  if (expected_collection_name.has_value()) {
+    REQUIRE(span->string_tags()["couchbase.collection.name"] == expected_collection_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
+  }
+
+  REQUIRE(span->child_spans("dispatch_to_server").empty());
+  REQUIRE(span->child_spans("query").empty());
+
+  for (const auto& [expected_sub_op, expected_sub_op_count] : expected_sub_ops) {
+    const auto sub_op_spans = span->child_spans(expected_sub_op);
+    REQUIRE_FALSE(sub_op_spans.empty());
     if (expected_sub_op_count > 0) {
-      // In some cases, we don't expect a specific number of sub-operations. For example, in
-      // watch_indexes there can be any number of get_all_indexes calls.
       REQUIRE(sub_op_spans.size() == expected_sub_op_count);
     }
-
-    for (const auto& sub_op_span : sub_op_spans) {
-      assert_http_op_span_ok(guard,
-                             sub_op_span.lock(),
-                             expected_sub_op,
-                             expected_service,
-                             expected_bucket_name,
-                             expected_scope_name,
-                             expected_collection_name,
-                             span,
-                             false);
+    for (const auto& weak_sub_span : sub_op_spans) {
+      const auto sub_span = weak_sub_span.lock();
+      REQUIRE(sub_span != nullptr);
+      assert_query_index_mgmt_op_span_ok(guard,
+                                         sub_span,
+                                         expected_sub_op,
+                                         expected_bucket_name,
+                                         expected_scope_name,
+                                         expected_collection_name,
+                                         span,
+                                         false);
+      REQUIRE(sub_span->start() >= span->start());
+      REQUIRE(sub_span->start() + sub_span->duration() <= span->start() + span->duration());
     }
   }
 }
@@ -959,7 +1001,8 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
     }
   }
 
-  if (integration.cluster_version().supports_collections()) {
+  if (integration.cluster_version().supports_collections() &&
+      integration.cluster_version().supports_query_index_management()) {
     SECTION("collection query index management - create, watch and drop index")
     {
       const auto mgr = cluster.bucket(integration.ctx.bucket).default_collection().query_indexes();
@@ -985,14 +1028,13 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_http_op_span_ok(integration,
-                               tracer->spans().front(),
-                               "manager_query_create_index",
-                               "query",
-                               integration.ctx.bucket,
-                               "_default",
-                               "_default",
-                               parent_span);
+        assert_query_index_mgmt_op_span_ok(integration,
+                                           tracer->spans().front(),
+                                           "manager_query_create_index",
+                                           integration.ctx.bucket,
+                                           "_default",
+                                           "_default",
+                                           parent_span);
         tracer->reset();
       }
       {
@@ -1003,12 +1045,11 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_compound_http_op_span_ok(
+        assert_compound_query_index_mgmt_op_span_ok(
           integration,
           tracer->spans().front(),
           "manager_query_build_deferred_indexes",
           { { "manager_query_get_all_deferred_indexes", 1 }, { "manager_query_build_indexes", 1 } },
-          "query",
           integration.ctx.bucket,
           "_default",
           "_default",
@@ -1024,14 +1065,13 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_http_op_span_ok(integration,
-                               tracer->spans().front(),
-                               "manager_query_drop_primary_index",
-                               "query",
-                               integration.ctx.bucket,
-                               "_default",
-                               "_default",
-                               parent_span);
+        assert_query_index_mgmt_op_span_ok(integration,
+                                           tracer->spans().front(),
+                                           "manager_query_drop_primary_index",
+                                           integration.ctx.bucket,
+                                           "_default",
+                                           "_default",
+                                           parent_span);
         tracer->reset();
       }
       {
@@ -1043,15 +1083,14 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_compound_http_op_span_ok(integration,
-                                        tracer->spans().front(),
-                                        "manager_query_watch_indexes",
-                                        { { "manager_query_get_all_indexes", {} } },
-                                        "query",
-                                        integration.ctx.bucket,
-                                        "_default",
-                                        "_default",
-                                        parent_span);
+        assert_compound_query_index_mgmt_op_span_ok(integration,
+                                                    tracer->spans().front(),
+                                                    "manager_query_watch_indexes",
+                                                    { { "manager_query_get_all_indexes", {} } },
+                                                    integration.ctx.bucket,
+                                                    "_default",
+                                                    "_default",
+                                                    parent_span);
         tracer->reset();
       }
       {
@@ -1061,14 +1100,13 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_http_op_span_ok(integration,
-                               tracer->spans().front(),
-                               "manager_query_get_all_indexes",
-                               "query",
-                               integration.ctx.bucket,
-                               "_default",
-                               "_default",
-                               parent_span);
+        assert_query_index_mgmt_op_span_ok(integration,
+                                           tracer->spans().front(),
+                                           "manager_query_get_all_indexes",
+                                           integration.ctx.bucket,
+                                           "_default",
+                                           "_default",
+                                           parent_span);
         tracer->reset();
       }
       {
@@ -1078,14 +1116,13 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
         REQUIRE_SUCCESS(err.ec());
 
         REQUIRE_FALSE(tracer->spans().empty());
-        assert_http_op_span_ok(integration,
-                               tracer->spans().front(),
-                               "manager_query_drop_index",
-                               "query",
-                               integration.ctx.bucket,
-                               "_default",
-                               "_default",
-                               parent_span);
+        assert_query_index_mgmt_op_span_ok(integration,
+                                           tracer->spans().front(),
+                                           "manager_query_drop_index",
+                                           integration.ctx.bucket,
+                                           "_default",
+                                           "_default",
+                                           parent_span);
         tracer->reset();
       }
     }
