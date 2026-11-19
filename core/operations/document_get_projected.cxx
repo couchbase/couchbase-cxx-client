@@ -25,6 +25,12 @@
 
 #include <tao/json/value.hpp>
 
+#include <charconv>
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <vector>
+
 namespace couchbase::core::operations
 {
 
@@ -39,9 +45,14 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
   while (offset < path.size()) {
     std::string::size_type idx = path.find_first_of(".[]", offset);
 
+    // A step entered through '[' is an index and ends at ']'.
+    if (offset > 0 && path[offset - 1] == '[' && (idx == std::string::npos || path[idx] != ']')) {
+      break;
+    }
+
     if (idx == std::string::npos) {
       const std::string key = path.substr(offset);
-      if (auto* val = cur->find(key); val != nullptr) {
+      if (auto* val = cur->is_object() ? cur->find(key) : nullptr; val != nullptr) {
         return *val;
       }
       break;
@@ -49,23 +60,28 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
 
     if (path[idx] == '.' || path[idx] == '[') {
       const std::string key = path.substr(offset, idx - offset);
-      auto* val = cur->find(key);
+      auto* val = cur->is_object() ? cur->find(key) : nullptr;
       if (val == nullptr) {
         break;
       }
       cur = val;
     } else if (path[idx] == ']') {
-      if (!cur->is_array()) {
+      if (offset == 0 || path[offset - 1] != '[' || !cur->is_array() || cur->get_array().empty()) {
         break;
       }
-      const std::string key = path.substr(offset, idx - offset);
-      if (const int array_index = std::stoi(key);
-          array_index == -1 || static_cast<std::size_t>(array_index) < cur->get_array().size()) {
-        cur = &cur->get_array().back();
-      } else {
-        break;
+      auto& array = cur->get_array();
+      const auto index = std::string_view{ path }.substr(offset, idx - offset);
+      std::size_t array_index = array.size() - 1;
+      if (index != "-1") {
+        const auto [end, ec] =
+          std::from_chars(index.data(), index.data() + index.size(), array_index);
+        if (ec != std::errc{} || end != index.data() + index.size() ||
+            array_index >= array.size()) {
+          break;
+        }
       }
-      if (idx < path.size() - 1) {
+      cur = &array[array_index];
+      if (idx == path.size() - 1) {
         return *cur;
       }
       idx += 1;
@@ -142,6 +158,28 @@ subdoc_apply_projection(tao::json::value& root,
     offset = idx + 1;
   }
 }
+
+// True when another projection copies this one's value: an enclosing path, or the same path earlier
+// in the list. Applying both can append an array element a second time.
+auto
+projected_by_another(const std::vector<std::string>& projections, std::size_t index) -> bool
+{
+  const std::string_view path = projections[index];
+  for (std::size_t i = 0; i < projections.size(); ++i) {
+    const std::string_view other = projections[i];
+    if (i == index || other.size() > path.size() || path.substr(0, other.size()) != other) {
+      continue;
+    }
+    if (other.size() == path.size()) {
+      if (i < index) {
+        return true;
+      }
+    } else if (path[other.size()] == '.' || path[other.size()] == '[') {
+      return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 auto
@@ -216,9 +254,13 @@ get_projected_request::make_response(key_value_error_context&& ctx,
           return response;
         }
         tao::json::value new_doc = tao::json::empty_object;
-        for (const auto& projection : projections) {
-          if (auto value_to_apply = subdoc_lookup(full_doc, projection)) {
-            subdoc_apply_projection(new_doc, projection, *value_to_apply, preserve_array_indexes);
+        for (std::size_t i = 0; i < projections.size(); ++i) {
+          if (projected_by_another(projections, i)) {
+            continue;
+          }
+          if (auto value_to_apply = subdoc_lookup(full_doc, projections[i])) {
+            subdoc_apply_projection(
+              new_doc, projections[i], *value_to_apply, preserve_array_indexes);
           }
           // We ignore paths that were not found, similar to how we ignore them in the subdoc
           // multi-lookup below.
@@ -228,7 +270,7 @@ get_projected_request::make_response(key_value_error_context&& ctx,
     } else {
       tao::json::value new_doc = tao::json::empty_object;
       std::size_t offset = with_expiry ? 2 : 1;
-      for (const auto& projection : projections) {
+      for (std::size_t i = 0; i < projections.size(); ++i) {
         const auto& field = encoded.body().fields()[offset];
         ++offset;
         if (field.status == key_value_status_code::success && !field.value.empty()) {
@@ -239,7 +281,10 @@ get_projected_request::make_response(key_value_error_context&& ctx,
             response.ctx.override_ec(errc::common::parsing_failure);
             return response;
           }
-          subdoc_apply_projection(new_doc, projection, value_to_apply, preserve_array_indexes);
+          if (!projected_by_another(projections, i)) {
+            subdoc_apply_projection(
+              new_doc, projections[i], value_to_apply, preserve_array_indexes);
+          }
         } else if (field.status != key_value_status_code::subdoc_path_not_found) {
           response.ctx.override_ec(
             protocol::map_status_code(protocol::client_opcode::subdoc_multi_lookup,
