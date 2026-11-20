@@ -278,6 +278,7 @@ public:
     req->value_ = utils::to_binary(fmt::format("{}.{}", req->scope_name_, req->collection_name_));
     req->retry_strategy_ =
       options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
 
     if (lookup_interceptor_) {
       lookup_interceptor_(req);

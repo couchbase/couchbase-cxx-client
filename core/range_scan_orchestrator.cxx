@@ -17,11 +17,17 @@
 
 #include "agent.hxx"
 #include "collections_options.hxx"
+#include "core/platform/base64.h"
+#include "core/tracing/attribute_helpers.hxx"
+#include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "logger/logger.hxx"
 #include "range_scan_load_balancer.hxx"
 #include "range_scan_options.hxx"
 
+#include "couchbase/collection.hxx"
 #include "couchbase/error_codes.hxx"
+#include "couchbase/scope.hxx"
 #include "utils/movable_function.hxx"
 
 #include <asio/bind_executor.hpp>
@@ -71,6 +77,54 @@ struct scan_stream_end_signal {
   std::optional<std::error_code> error{};
 };
 
+range_scan_span_tracker::range_scan_span_tracker(
+  utils::movable_function<void(std::error_code)> end_span)
+  : end_span_{ std::move(end_span) }
+{
+}
+
+auto
+range_scan_span_tracker::partition_opened() -> bool
+{
+  const std::scoped_lock lock{ mutex_ };
+  if (!end_span_) {
+    return false;
+  }
+  ++open_partitions_;
+  return true;
+}
+
+void
+range_scan_span_tracker::partition_closed()
+{
+  std::unique_lock lock{ mutex_ };
+  --open_partitions_;
+  end_if_done(std::move(lock));
+}
+
+void
+range_scan_span_tracker::finish(std::error_code ec)
+{
+  std::unique_lock lock{ mutex_ };
+  if (!result_) {
+    result_ = ec;
+  }
+  end_if_done(std::move(lock));
+}
+
+void
+range_scan_span_tracker::end_if_done(std::unique_lock<std::mutex> lock)
+{
+  if (!result_ || open_partitions_ > 0 || !end_span_) {
+    return;
+  }
+  auto end_span = std::move(end_span_);
+  end_span_ = nullptr;
+  const auto ec = result_.value();
+  lock.unlock();
+  end_span(ec);
+}
+
 class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 {
   // The stream has failed and should not be retried
@@ -95,7 +149,10 @@ public:
                     std::int16_t node_id,
                     range_scan_create_options create_options,
                     range_scan_continue_options continue_options,
-                    std::weak_ptr<scan_stream_manager> stream_manager)
+                    std::weak_ptr<scan_stream_manager> stream_manager,
+                    std::shared_ptr<tracing::tracer_wrapper> tracer,
+                    std::shared_ptr<couchbase::tracing::request_span> parent_span,
+                    std::shared_ptr<range_scan_span_tracker> span_tracker)
     : agent_{ std::move(kv_provider) }
     , io_{ io }
     , vbucket_id_{ vbucket_id }
@@ -103,7 +160,21 @@ public:
     , create_options_{ std::move(create_options) }
     , continue_options_{ std::move(continue_options) }
     , stream_manager_{ std::move(stream_manager) }
+    , tracer_{ std::move(tracer) }
+    , parent_span_{ std::move(parent_span) }
+    , span_tracker_{ std::move(span_tracker) }
   {
+  }
+
+  range_scan_stream(const range_scan_stream&) = delete;
+  range_scan_stream(range_scan_stream&&) = delete;
+  auto operator=(const range_scan_stream&) -> range_scan_stream& = delete;
+  auto operator=(range_scan_stream&&) -> range_scan_stream& = delete;
+
+  // A stream abandoned by a cancelled scan before reaching a terminal state ends its span here.
+  ~range_scan_stream()
+  {
+    end_partition_span();
   }
 
   void start()
@@ -117,6 +188,7 @@ public:
           "stream for vbucket_id {} cannot be retried because it has exceeded the timeout",
           vbucket_id_);
         state_ = failed{ errc::common::unambiguous_timeout, !is_sampling_scan() };
+        end_partition_span();
         if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
           mgr->stream_failed(
             node_id_, vbucket_id_, errc::common::unambiguous_timeout, error_is_fatal());
@@ -133,9 +205,27 @@ public:
       std::get<range_scan>(create_options_.scan_type).from = scan_term{ last_seen_key_ };
     }
 
+    if (tracer_ && !partition_span_ && (!span_tracker_ || span_tracker_->partition_opened())) {
+      partition_span_ =
+        tracer_->create_span(tracing::operation::mcbp_range_scan_partition, parent_span_);
+      if (partition_span_->uses_tags()) {
+        partition_span_->add_tag(tracing::attributes::range_scan::partition_id,
+                                 std::uint64_t{ vbucket_id_ });
+      }
+    }
+    auto create_options = create_options_;
+    create_options.parent_span = start_create_span();
+
     agent_.range_scan_create(
-      vbucket_id_, create_options_, [self = shared_from_this()](auto res, auto ec) {
+      vbucket_id_,
+      create_options,
+      [self = shared_from_this(), span = create_options.parent_span](auto res, auto ec) {
+        end_span(span);
         if (ec) {
+          // A busy partition is retried under the same partition span.
+          if (ec != errc::common::temporary_failure) {
+            self->end_partition_span();
+          }
           if (ec == errc::key_value::document_not_found) {
             // Benign error
             CB_LOG_TRACE("ignoring vbucket_id {} because no documents exist for it",
@@ -218,6 +308,7 @@ private:
     }
 
     state_ = failed{ ec, fatal };
+    end_partition_span();
     if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
       mgr->stream_failed(node_id_, vbucket_id_, ec, fatal);
     }
@@ -229,6 +320,7 @@ private:
       return;
     }
 
+    end_partition_span();
     if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
       mgr->stream_completed(node_id_, vbucket_id_);
     }
@@ -244,8 +336,19 @@ private:
     }
 
     asio::post(asio::bind_executor(io_, [self = shared_from_this(), scan_uuid]() mutable {
+      // A CANCEL with no deadline would hold the partition span, and so the scan span, until a
+      // reply.
+      range_scan_cancel_options options{};
+      options.timeout = self->create_options_.timeout;
+      options.parent_span =
+        self->scan_uuid_span(tracing::operation::mcbp_range_scan_cancel, scan_uuid);
       self->agent_.range_scan_cancel(
-        scan_uuid, self->vbucket_id_, {}, [](auto /* res */, auto /* ec */) {
+        scan_uuid,
+        self->vbucket_id_,
+        options,
+        [self, span = options.parent_span](auto /* res */, auto /* ec */) {
+          end_span(span);
+          self->end_partition_span();
         });
     }));
   }
@@ -276,10 +379,23 @@ private:
     }
 
     asio::post(asio::bind_executor(io_, [self = shared_from_this()]() mutable {
+      auto scan_uuid = self->uuid();
+      auto continue_options = self->continue_options_;
+      continue_options.parent_span =
+        self->scan_uuid_span(tracing::operation::mcbp_range_scan_continue, scan_uuid);
+      if (continue_options.parent_span && continue_options.parent_span->uses_tags()) {
+        const auto& span = continue_options.parent_span;
+        span->add_tag(tracing::attributes::range_scan::item_limit,
+                      std::uint64_t{ continue_options.batch_item_limit });
+        span->add_tag(tracing::attributes::range_scan::byte_limit,
+                      std::uint64_t{ continue_options.batch_byte_limit });
+        span->add_tag(tracing::attributes::range_scan::time_limit,
+                      static_cast<std::uint64_t>(continue_options.batch_time_limit.count()));
+      }
       self->agent_.range_scan_continue(
-        self->uuid(),
+        scan_uuid,
         self->vbucket_id_,
-        self->continue_options_,
+        continue_options,
         [self](auto item) {
           // The scan has already been cancelled, no need to send items
           if (self->should_cancel_) {
@@ -290,7 +406,8 @@ private:
             mgr->stream_received_item(std::move(item));
           }
         },
-        [self](auto res, auto ec) {
+        [self, span = continue_options.parent_span](auto res, auto ec) {
+          end_span(span);
           if (ec) {
             return self->fail(ec);
           }
@@ -302,6 +419,70 @@ private:
           }
         });
     }));
+  }
+
+  static void end_span(const std::shared_ptr<couchbase::tracing::request_span>& span)
+  {
+    if (span) {
+      span->end();
+    }
+  }
+
+  void end_partition_span()
+  {
+    if (auto span = std::exchange(partition_span_, nullptr); span) {
+      span->end();
+      if (span_tracker_) {
+        span_tracker_->partition_closed();
+      }
+    }
+  }
+
+  [[nodiscard]] auto start_create_span() const -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    if (!tracer_) {
+      return nullptr;
+    }
+    auto span = tracer_->create_span(tracing::operation::mcbp_range_scan_create, partition_span_);
+    if (!span->uses_tags()) {
+      return span;
+    }
+    tracing::add_bool_tag(
+      span, tracing::attributes::range_scan::without_content, create_options_.ids_only);
+    if (const auto range = resolve_range(create_options_.scan_type); range.has_value()) {
+      const auto& [from, to] = range.value();
+      span->add_tag(tracing::attributes::range_scan::scan_type, "range");
+      span->add_tag(tracing::attributes::range_scan::from_term, base64::encode(from.term));
+      span->add_tag(tracing::attributes::range_scan::to_term, base64::encode(to.term));
+      tracing::add_bool_tag(span, tracing::attributes::range_scan::from_exclusive, from.exclusive);
+      tracing::add_bool_tag(span, tracing::attributes::range_scan::to_exclusive, to.exclusive);
+    } else if (const auto* sampling = std::get_if<sampling_scan>(&create_options_.scan_type);
+               sampling != nullptr) {
+      span->add_tag(tracing::attributes::range_scan::scan_type, "sampling");
+      span->add_tag(tracing::attributes::range_scan::limit, sampling->limit);
+      if (sampling->seed.has_value()) {
+        span->add_tag(tracing::attributes::range_scan::seed, sampling->seed.value());
+      }
+    }
+    return span;
+  }
+
+  // A CONTINUE or CANCEL span, tagged with the scan UUID as a 0x-prefixed hex string.
+  [[nodiscard]] auto scan_uuid_span(const char* name, const std::vector<std::byte>& scan_uuid) const
+    -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    if (!tracer_) {
+      return nullptr;
+    }
+    auto span = tracer_->create_span(name, partition_span_);
+    if (span->uses_tags()) {
+      std::string id{ "0x" };
+      for (const auto b : scan_uuid) {
+        id += fmt::format("{:02x}", std::to_integer<std::uint8_t>(b));
+      }
+      span->add_tag(tracing::attributes::range_scan::range_scan_id, id);
+    }
+    return span;
   }
 
   [[nodiscard]] auto uuid() const -> std::vector<std::byte>
@@ -344,6 +525,11 @@ private:
   range_scan_create_options create_options_;
   range_scan_continue_options continue_options_;
   std::weak_ptr<scan_stream_manager> stream_manager_;
+  std::shared_ptr<tracing::tracer_wrapper> tracer_;
+  std::shared_ptr<couchbase::tracing::request_span> parent_span_;
+  std::shared_ptr<range_scan_span_tracker> span_tracker_;
+  // Open from the first CREATE of the partition until it completes, fails or is cancelled.
+  std::shared_ptr<couchbase::tracing::request_span> partition_span_{};
   std::string last_seen_key_{};
   std::variant<std::monostate, failed, running, completed> state_{};
   std::atomic<bool> should_cancel_{ false };
@@ -409,56 +595,74 @@ public:
       return cb(errc::network::configuration_not_available, {});
     }
 
+    // The default collection always has ID 0, so it needs no lookup.
+    if ((scope_name_.empty() || scope_name_ == scope::default_name) &&
+        (collection_name_.empty() || collection_name_ == collection::default_name)) {
+      return create_streams(std::move(cb));
+    }
+
+    std::shared_ptr<couchbase::tracing::request_span> span{};
+    if (options_.tracer) {
+      span = options_.tracer->create_span(tracing::operation::mcbp_get_collection_id,
+                                          options_.parent_span);
+    }
     const get_collection_id_options get_cid_options{ options_.retry_strategy,
                                                      options_.timeout,
-                                                     options_.parent_span };
+                                                     span };
     agent_.get_collection_id(
       scope_name_,
       collection_name_,
       get_cid_options,
-      [self = shared_from_this(), cb = std::move(cb)](auto get_cid_res, auto ec) mutable {
+      [self = shared_from_this(), span, cb = std::move(cb)](auto get_cid_res, auto ec) mutable {
+        if (span) {
+          span->end();
+        }
         if (ec) {
           return cb(ec, {});
         }
         self->collection_id_ = get_cid_res.collection_id;
-
-        auto batch_time_limit =
-          std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * self->options_.timeout);
-        const range_scan_continue_options continue_options{
-          self->options_.batch_item_limit, self->options_.batch_byte_limit,
-          self->options_.timeout,          batch_time_limit,
-          self->options_.retry_strategy,
-        };
-
-        for (std::uint16_t vbucket = 0;
-             vbucket < gsl::narrow_cast<std::uint16_t>(self->vbucket_map_.size());
-             ++vbucket) {
-          const range_scan_create_options create_options{
-            self->scope_name_,       self->collection_name_,
-            self->scan_type_,        self->options_.timeout,
-            self->collection_id_,    self->vbucket_to_snapshot_requirements_[vbucket],
-            self->options_.ids_only, self->options_.retry_strategy,
-          };
-
-          // Get the active node for the vbucket (values in vbucket map are the active node id
-          // followed by the ids of the replicas). scan() has already established that every row
-          // names one.
-          auto node_id = self->vbucket_map_[vbucket][0];
-
-          auto stream = std::make_shared<range_scan_stream>(
-            self->io_,
-            self->agent_,
-            vbucket,
-            node_id,
-            create_options,
-            continue_options,
-            std::static_pointer_cast<scan_stream_manager>(self));
-          self->streams_[vbucket] = stream;
-        }
-        self->start_streams(self->concurrency_);
-        // Transferring ownership of the range_scan_orchestrator impl to the scan_result
-        return cb({}, scan_result(std::move(self)));
+        return self->create_streams(std::move(cb));
       });
+  }
+
+  void create_streams(scan_callback&& cb)
+  {
+    auto batch_time_limit =
+      std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * options_.timeout);
+    const range_scan_continue_options continue_options{
+      options_.batch_item_limit, options_.batch_byte_limit, options_.timeout,
+      batch_time_limit,          options_.retry_strategy,
+    };
+
+    for (std::uint16_t vbucket = 0; vbucket < gsl::narrow_cast<std::uint16_t>(vbucket_map_.size());
+         ++vbucket) {
+      const range_scan_create_options create_options{
+        scope_name_,       collection_name_,        scan_type_,
+        options_.timeout,  collection_id_,          vbucket_to_snapshot_requirements_[vbucket],
+        options_.ids_only, options_.retry_strategy,
+      };
+
+      // Get the active node for the vbucket (values in vbucket map are the active node id
+      // followed by the ids of the replicas). scan() has already established that every row
+      // names one.
+      auto node_id = vbucket_map_[vbucket][0];
+
+      auto stream = std::make_shared<range_scan_stream>(
+        io_,
+        agent_,
+        vbucket,
+        node_id,
+        create_options,
+        continue_options,
+        std::static_pointer_cast<scan_stream_manager>(shared_from_this()),
+        options_.tracer,
+        options_.parent_span,
+        options_.span_tracker);
+      streams_[vbucket] = stream;
+    }
+    start_streams(concurrency_);
+    // Transferring ownership of the range_scan_orchestrator impl to the scan_result
+    return cb({}, scan_result(shared_from_this()));
   }
 
   void cancel() override

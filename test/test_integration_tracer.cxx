@@ -18,16 +18,23 @@
 #include "test_helper_integration.hxx"
 
 #include "core/operations/management/query_index_drop.hxx"
+#include "core/platform/base64.h"
+#include "core/range_scan_options.hxx"
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/match_all_query.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/scan_type.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <spdlog/fmt/bundled/ranges.h>
+
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 class test_span : public couchbase::tracing::request_span
 {
@@ -59,6 +66,15 @@ public:
   {
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
+  }
+
+  // Polls, because a range_scan span may end on an I/O thread after the scan result is delivered.
+  void wait_until_ended(std::chrono::milliseconds budget = std::chrono::seconds{ 10 }) const
+  {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (duration().count() == 0 && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+    }
   }
 
   void add_child_span(const std::shared_ptr<test_span>& child)
@@ -99,7 +115,7 @@ public:
 
   auto duration() const -> std::chrono::nanoseconds
   {
-    return duration_;
+    return duration_.load();
   }
 
   auto start() const -> std::chrono::time_point<std::chrono::steady_clock>
@@ -115,7 +131,7 @@ public:
 private:
   std::string id_;
   std::chrono::time_point<std::chrono::steady_clock> start_;
-  std::chrono::nanoseconds duration_{ 0 };
+  std::atomic<std::chrono::nanoseconds> duration_{ std::chrono::nanoseconds{ 0 } };
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
   std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};
@@ -677,6 +693,251 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
   }
 
   tracer->reset();
+}
+
+namespace
+{
+auto
+end_time(const std::shared_ptr<test_span>& span) -> std::chrono::steady_clock::time_point
+{
+  return span->start() + span->duration();
+}
+
+// Consumes the scan to EOF and returns the number of items.
+auto
+drain(const couchbase::scan_result& result) -> std::size_t
+{
+  std::size_t count = 0;
+  while (true) {
+    auto [err, item] = result.next().get();
+    REQUIRE_SUCCESS(err.ec());
+    if (!item.has_value()) {
+      return count;
+    }
+    ++count;
+  }
+}
+
+auto
+child(const std::shared_ptr<test_span>& span, const std::string& name)
+  -> std::vector<std::shared_ptr<test_span>>
+{
+  std::vector<std::shared_ptr<test_span>> children{};
+  for (const auto& weak : span->child_spans(name)) {
+    children.push_back(weak.lock());
+  }
+  return children;
+}
+
+// The range_scan span ends only after every partition span under it.
+void
+assert_range_scan_outlives_partitions(const std::shared_ptr<test_span>& scan_span)
+{
+  scan_span->wait_until_ended();
+  REQUIRE(scan_span->duration().count() > 0);
+  std::size_t open_or_late = 0;
+  for (const auto& partition : child(scan_span, "range_scan_partition")) {
+    if (partition->duration().count() == 0 || end_time(partition) > end_time(scan_span)) {
+      ++open_or_late;
+    }
+  }
+  REQUIRE(open_or_late == 0);
+}
+
+// Checks the partition, create and continue spans under a range_scan span that has reached EOF.
+void
+assert_range_scan_partitions_ok(test::utils::integration_test_guard& guard,
+                                const std::shared_ptr<test_span>& scan_span,
+                                const std::string& scan_type,
+                                std::uint64_t time_limit_ms)
+{
+  const auto partitions = child(scan_span, "range_scan_partition");
+  REQUIRE(partitions.size() == scan_span->int_tags().at("num_partitions"));
+
+  // Full checks cover the partitions that streamed documents and one that had none. The rest differ
+  // only in partition_id, and checking every one of them exceeds the test timeout under valgrind.
+  std::size_t continue_count = 0;
+  bool checked_empty_partition = false;
+  for (const auto& partition : partitions) {
+    if (partition->child_spans("range_scan_continue").empty()) {
+      if (checked_empty_partition) {
+        continue;
+      }
+      checked_empty_partition = true;
+    }
+    assert_span_ok(guard, partition, false, scan_span);
+    REQUIRE(partition->int_tags().count("partition_id") == 1);
+
+    const auto creates = child(partition, "range_scan_create");
+    REQUIRE_FALSE(creates.empty());
+    for (const auto& create : creates) {
+      assert_span_ok(guard, create, false, partition);
+      REQUIRE(create->string_tags().at("scan_type") == scan_type);
+      const auto dispatches = child(create, "dispatch_to_server");
+      REQUIRE_FALSE(dispatches.empty());
+      for (const auto& dispatch : dispatches) {
+        assert_kv_dispatch_span_ok(guard, dispatch, create);
+      }
+    }
+
+    for (const auto& cont : child(partition, "range_scan_continue")) {
+      ++continue_count;
+      assert_span_ok(guard, cont, false, partition);
+      REQUIRE(cont->string_tags().at("range_scan_id").rfind("0x", 0) == 0);
+      REQUIRE(cont->string_tags().at("range_scan_id").size() == 34);
+      REQUIRE(cont->int_tags().at("item_limit") ==
+              couchbase::core::range_scan_continue_options::default_batch_item_limit);
+      REQUIRE(cont->int_tags().at("byte_limit") ==
+              couchbase::core::range_scan_continue_options::default_batch_byte_limit);
+      REQUIRE(cont->int_tags().at("time_limit") == time_limit_ms);
+      const auto dispatches = child(cont, "dispatch_to_server");
+      REQUIRE_FALSE(dispatches.empty());
+      for (const auto& dispatch : dispatches) {
+        assert_kv_dispatch_span_ok(guard, dispatch, cont);
+      }
+    }
+    REQUIRE(child(partition, "range_scan_cancel").empty());
+  }
+  REQUIRE(continue_count > 0);
+}
+} // namespace
+
+TEST_CASE("integration: enable external tracer - KV range scan", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.has_bucket_capability("range_scan")) {
+    SKIP("cluster does not support range_scan");
+  }
+
+  auto tracer = std::make_shared<test_tracer>();
+  auto cluster = integration.public_cluster([tracer](couchbase::cluster_options& opts) {
+    opts.tracing().tracer(tracer);
+  });
+  auto parent_span = std::make_shared<test_span>("parent");
+  // Long enough to open the bucket under valgrind.
+  const auto timeout = std::chrono::seconds{ 60 };
+  // RFC 73: the server batch time limit is 90% of the scan timeout.
+  const std::uint64_t time_limit_ms = 54'000;
+
+  const auto prefix = test::utils::uniq_id("tracer_scan");
+  const auto value = couchbase::core::utils::json::parse(R"({"some":"thing"})");
+  // Scanning at the upserts' mutation tokens makes every upserted document visible to the scan.
+  couchbase::mutation_state state{};
+
+  SECTION("prefix scan")
+  {
+    auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+    for (int i = 0; i < 10; ++i) {
+      auto [err, res] = collection.upsert(fmt::format("{}_{}", prefix, i), value).get();
+      REQUIRE_SUCCESS(err.ec());
+      state.add(res);
+    }
+    tracer->reset();
+
+    auto [err, result] = collection
+                           .scan(couchbase::prefix_scan{ prefix },
+                                 couchbase::scan_options{}
+                                   .consistent_with(state)
+                                   .parent_span(parent_span)
+                                   .timeout(timeout))
+                           .get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(drain(result) == 10);
+
+    const auto scan_span = tracer->spans().front();
+    assert_range_scan_outlives_partitions(scan_span);
+    assert_span_ok(integration, scan_span, true, parent_span);
+    REQUIRE(scan_span->name() == "range_scan");
+    REQUIRE(scan_span->string_tags().at("scan_type") == "range");
+    REQUIRE(scan_span->string_tags().at("from_term") == couchbase::core::base64::encode(prefix));
+    REQUIRE(scan_span->string_tags().at("to_term") ==
+            couchbase::core::base64::encode(prefix + "\xf4\x8f\xfb\xfb"));
+    REQUIRE(scan_span->int_tags().at("without_content") == 0);
+    // The default collection is not looked up.
+    REQUIRE(scan_span->child_spans("get_collection_id").empty());
+    assert_range_scan_partitions_ok(integration, scan_span, "range", time_limit_ms);
+  }
+
+  SECTION("sampling scan in a named collection")
+  {
+    const test::utils::collection_guard new_collection(integration);
+    auto collection = cluster.bucket(integration.ctx.bucket)
+                        .scope(new_collection.scope_name())
+                        .collection(new_collection.collection_name());
+    for (int i = 0; i < 10; ++i) {
+      auto [err, res] = collection.upsert(fmt::format("{}_{}", prefix, i), value).get();
+      REQUIRE_SUCCESS(err.ec());
+      state.add(res);
+    }
+    tracer->reset();
+
+    auto [err, result] = collection
+                           .scan(couchbase::sampling_scan{ 3 },
+                                 couchbase::scan_options{}
+                                   .ids_only(true)
+                                   .consistent_with(state)
+                                   .parent_span(parent_span)
+                                   .timeout(timeout))
+                           .get();
+    REQUIRE_SUCCESS(err.ec());
+    // A sampling scan returns at most its limit.
+    const auto count = drain(result);
+    REQUIRE(count > 0);
+    REQUIRE(count <= 3);
+
+    // The scan stops at its limit with partitions still open, so its span ends after their CANCEL.
+    const auto scan_span = tracer->spans().front();
+    assert_range_scan_outlives_partitions(scan_span);
+    assert_span_ok(integration, scan_span, true, parent_span);
+    REQUIRE(scan_span->string_tags().at("scan_type") == "sampling");
+    REQUIRE(scan_span->int_tags().at("limit") == 3);
+    REQUIRE(scan_span->int_tags().at("without_content") == 1);
+    // A seed is chosen when the caller sets none, and every CREATE uses it.
+    const auto seed = scan_span->int_tags().at("seed");
+    for (const auto& partition : child(scan_span, "range_scan_partition")) {
+      for (const auto& create : child(partition, "range_scan_create")) {
+        REQUIRE(create->int_tags().at("seed") == seed);
+      }
+    }
+
+    const auto lookups = child(scan_span, "get_collection_id");
+    REQUIRE(lookups.size() == 1);
+    assert_span_ok(integration, lookups.front(), false, scan_span);
+    const auto dispatches = child(lookups.front(), "dispatch_to_server");
+    REQUIRE_FALSE(dispatches.empty());
+    for (const auto& dispatch : dispatches) {
+      assert_kv_dispatch_span_ok(integration, dispatch, lookups.front());
+    }
+  }
+
+  SECTION("cancelled scan")
+  {
+    auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+    for (int i = 0; i < 10; ++i) {
+      auto [err, res] = collection.upsert(fmt::format("{}_{}", prefix, i), value).get();
+      REQUIRE_SUCCESS(err.ec());
+      state.add(res);
+    }
+    tracer->reset();
+
+    auto [err, result] = collection
+                           .scan(couchbase::prefix_scan{ prefix },
+                                 couchbase::scan_options{}
+                                   .consistent_with(state)
+                                   .parent_span(parent_span)
+                                   .timeout(timeout))
+                           .get();
+    REQUIRE_SUCCESS(err.ec());
+    auto [next_err, item] = result.next().get();
+    REQUIRE_SUCCESS(next_err.ec());
+    REQUIRE(item.has_value());
+
+    const auto scan_span = tracer->spans().front();
+    REQUIRE(scan_span->duration().count() == 0);
+    result.cancel();
+    assert_range_scan_outlives_partitions(scan_span);
+  }
 }
 
 TEST_CASE("integration: enable external tracer - HTTP operations", "[integration]")

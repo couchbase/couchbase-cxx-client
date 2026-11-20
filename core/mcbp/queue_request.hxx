@@ -27,10 +27,14 @@
 #include <asio/steady_timer.hpp>
 
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
+#include <string>
 
 namespace couchbase::core
 {
@@ -76,6 +80,17 @@ public:
   void set_deadline(std::shared_ptr<asio::steady_timer> timer);
   void set_retry_backoff(std::shared_ptr<asio::steady_timer> timer);
 
+  // Traces one dispatch attempt with `span`, ending the span of the previous attempt. The span
+  // ends at the attempt's response, or when the request completes without one.
+  void set_dispatch_span(std::shared_ptr<couchbase::tracing::request_span> span,
+                         std::string peer_address,
+                         std::uint16_t peer_port,
+                         std::string server_address,
+                         std::uint16_t server_port);
+  // A persistent request sums the server duration of every frame of the attempt, and its span ends
+  // at the frame that ends the attempt: any status other than success.
+  void record_dispatch_response(std::chrono::microseconds server_duration, bool final_frame);
+
   std::string collection_name_{};
   std::string scope_name_{};
   std::size_t replica_index_{ 0 };
@@ -103,11 +118,23 @@ public:
   // Kept alive here so the span outlives any retry loops.
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
 
-  // The per-dispatch child span representing a single attempt on a specific node.
-  // Reset and recreated on every retry by crud_component.
-  std::shared_ptr<couchbase::tracing::request_span> dispatch_span_{ nullptr };
-
 private:
+  struct dispatch_attempt {
+    std::shared_ptr<couchbase::tracing::request_span> span{};
+    std::string peer_address{};
+    std::uint16_t peer_port{ 0 };
+    std::string server_address{};
+    std::uint16_t server_port{ 0 };
+    std::optional<std::chrono::microseconds> server_duration{};
+  };
+
+  static void end_dispatch_span(dispatch_attempt attempt);
+  void end_dispatch_span();
+
+  // The per-dispatch child span of parent_span_, representing a single attempt on a specific node.
+  dispatch_attempt dispatch_attempt_{};
+  std::mutex dispatch_mutex_{};
+
   // Static routing properties
   queue_callback callback_;
 

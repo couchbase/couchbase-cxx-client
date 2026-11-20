@@ -26,6 +26,22 @@ prefix_scan::to_range_scan() const -> range_scan
 }
 
 auto
+resolve_range(const std::variant<std::monostate, range_scan, prefix_scan, sampling_scan>& scan_type)
+  -> std::optional<std::pair<scan_term, scan_term>>
+{
+  std::optional<range_scan> range{};
+  if (const auto* r = std::get_if<range_scan>(&scan_type); r != nullptr) {
+    range = *r;
+  } else if (const auto* p = std::get_if<prefix_scan>(&scan_type); p != nullptr) {
+    range = p->to_range_scan();
+  } else {
+    return std::nullopt;
+  }
+  return std::make_pair(range->from.value_or(scan_term{ "" }),
+                        range->to.value_or(scan_term{ "\xf4\x8f\xfb\xfb" }));
+}
+
+auto
 range_scan_item_body::expiry_time() const -> std::chrono::system_clock::time_point
 {
   return std::chrono::system_clock::time_point(std::chrono::seconds{ expiry });

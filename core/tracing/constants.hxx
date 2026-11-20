@@ -59,6 +59,8 @@ constexpr auto mcbp_decrement = "decrement";
 constexpr auto mcbp_range_scan_create = "range_scan_create";
 constexpr auto mcbp_range_scan_continue = "range_scan_continue";
 constexpr auto mcbp_range_scan_cancel = "range_scan_cancel";
+constexpr auto mcbp_range_scan_partition = "range_scan_partition";
+constexpr auto mcbp_get_collection_id = "get_collection_id";
 constexpr auto mcbp_internal = "internal";
 
 // Multi-command operations
@@ -66,7 +68,7 @@ constexpr auto mcbp_get_all_replicas = "get_all_replicas";
 constexpr auto mcbp_get_any_replica = "get_any_replica";
 constexpr auto mcbp_lookup_in_all_replicas = "lookup_in_all_replicas";
 constexpr auto mcbp_lookup_in_any_replica = "lookup_in_any_replica";
-constexpr auto mcbp_scan = "scan";
+constexpr auto mcbp_scan = "range_scan";
 constexpr auto ping = "ping";
 constexpr auto diagnostics = "diagnostics";
 
@@ -166,6 +168,25 @@ constexpr auto peer_port = "network.peer.port";
 constexpr auto network_transport = "network.transport";
 constexpr auto operation_id = "couchbase.operation_id";
 } // namespace dispatch
+
+// Range scan attributes (RFC 73)
+namespace range_scan
+{
+constexpr auto without_content = "without_content";
+constexpr auto scan_type = "scan_type";
+constexpr auto from_term = "from_term";
+constexpr auto to_term = "to_term";
+constexpr auto from_exclusive = "from_exclusive";
+constexpr auto to_exclusive = "to_exclusive";
+constexpr auto limit = "limit";
+constexpr auto seed = "seed";
+constexpr auto num_partitions = "num_partitions";
+constexpr auto partition_id = "partition_id";
+constexpr auto range_scan_id = "range_scan_id";
+constexpr auto item_limit = "item_limit";
+constexpr auto byte_limit = "byte_limit";
+constexpr auto time_limit = "time_limit";
+} // namespace range_scan
 
 // Reserved attributes for internal use
 namespace reserved

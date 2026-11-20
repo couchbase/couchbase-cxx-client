@@ -21,14 +21,17 @@
 #include "core/range_scan_orchestrator.hxx"
 #include "core/scan_result.hxx"
 
+#include <memory>
+
 namespace couchbase
 {
 class internal_scan_result
 {
 
 public:
-  explicit internal_scan_result(core::scan_result core_result,
-                                std::shared_ptr<crypto::manager> crypto_manager);
+  internal_scan_result(core::scan_result core_result,
+                       std::shared_ptr<crypto::manager> crypto_manager,
+                       std::shared_ptr<core::range_scan_span_tracker> span_tracker);
   internal_scan_result(const internal_scan_result&) = delete;
   internal_scan_result(internal_scan_result&&) noexcept = default;
   auto operator=(const internal_scan_result&) -> internal_scan_result& = delete;
@@ -41,5 +44,7 @@ public:
 private:
   core::scan_result core_result_;
   std::shared_ptr<crypto::manager> crypto_manager_;
+  // Given the result by whichever comes first: the end of the stream, an error, or cancel().
+  std::shared_ptr<core::range_scan_span_tracker> span_tracker_;
 };
 } // namespace couchbase

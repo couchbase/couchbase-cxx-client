@@ -55,6 +55,7 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/platform/base64.h"
 #include "core/range_scan_options.hxx"
 #include "core/range_scan_orchestrator.hxx"
 #include "core/range_scan_orchestrator_options.hxx"
@@ -110,6 +111,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -1171,11 +1173,14 @@ public:
     } else {
       auto [ec, origin] = core_.origin();
       if (ec) {
+        obs_rec->finish(ec);
         handler({ ec }, {});
         return;
       }
       orchestrator_opts.timeout = origin.options().key_value_scan_timeout;
     }
+    orchestrator_opts.parent_span = obs_rec->operation_span();
+    orchestrator_opts.tracer = core_.tracer();
 
     std::variant<std::monostate, core::range_scan, core::prefix_scan, core::sampling_scan>
       core_scan_type{};
@@ -1196,11 +1201,33 @@ public:
         };
         break;
       case scan_type::built::sampling_scan:
+        // Choose the seed here rather than per partition, so that every partition samples with
+        // the same seed and the span records it.
         core_scan_type = core::sampling_scan{
           scan_type.limit,
-          scan_type.seed,
+          scan_type.seed.has_value() ? scan_type.seed.value()
+                                     : std::mt19937_64{ std::random_device{}() }(),
         };
         break;
+    }
+
+    if (const auto& span = obs_rec->operation_span(); span->uses_tags()) {
+      core::tracing::add_bool_tag(
+        span, core::tracing::attributes::range_scan::without_content, options.ids_only);
+      if (const auto range = core::resolve_range(core_scan_type); range.has_value()) {
+        span->add_tag(core::tracing::attributes::range_scan::scan_type, "range");
+        span->add_tag(core::tracing::attributes::range_scan::from_term,
+                      core::base64::encode(range->first.term));
+        span->add_tag(core::tracing::attributes::range_scan::to_term,
+                      core::base64::encode(range->second.term));
+      } else {
+        const auto& sampling = std::get<core::sampling_scan>(core_scan_type);
+        span->add_tag(core::tracing::attributes::range_scan::scan_type, "sampling");
+        span->add_tag(core::tracing::attributes::range_scan::limit, sampling.limit);
+        if (sampling.seed.has_value()) {
+          span->add_tag(core::tracing::attributes::range_scan::seed, sampling.seed.value());
+        }
+      }
     }
 
     // Fetch the bucket configuration through the shared async scaffold rather than nesting
@@ -1265,6 +1292,16 @@ public:
                          {});
         }
 
+        if (const auto& span = obs_rec->operation_span(); span->uses_tags()) {
+          span->add_tag(core::tracing::attributes::range_scan::num_partitions,
+                        config->vbmap->size());
+        }
+
+        auto span_tracker = std::make_shared<core::range_scan_span_tracker>(
+          [obs_rec = std::move(obs_rec)](std::error_code ec) {
+            obs_rec->finish(ec);
+          });
+        orchestrator_opts.span_tracker = span_tracker;
         auto orchestrator = core::range_scan_orchestrator(core.io_context(),
                                                           agent.value(),
                                                           config->vbmap.value(),
@@ -1272,18 +1309,18 @@ public:
                                                           name,
                                                           core_scan_type,
                                                           orchestrator_opts);
-        return orchestrator.scan([obs_rec = std::move(obs_rec),
-                                  crypto_manager = std::move(crypto_manager),
-                                  handler = std::move(handler)](auto ec,
-                                                                auto core_scan_result) mutable {
-          obs_rec->finish(ec);
-          if (ec) {
-            return handler(error(ec, "Error while starting the range scan"), {});
-          }
-          auto internal_result = std::make_shared<internal_scan_result>(std::move(core_scan_result),
-                                                                        std::move(crypto_manager));
-          return handler({}, scan_result{ internal_result });
-        });
+        return orchestrator.scan(
+          [span_tracker, crypto_manager = std::move(crypto_manager), handler = std::move(handler)](
+            auto ec, auto core_scan_result) mutable {
+            if (ec) {
+              span_tracker->finish(ec);
+              return handler(error(ec, "Error while starting the range scan"), {});
+            }
+            // The span stays open while the items stream; internal_scan_result reports the result.
+            auto internal_result = std::make_shared<internal_scan_result>(
+              std::move(core_scan_result), std::move(crypto_manager), span_tracker);
+            return handler({}, scan_result{ internal_result });
+          });
       },
       [](const std::shared_ptr<core::topology::configuration>& config)
         -> std::pair<std::error_code, std::shared_ptr<core::topology::configuration>> {
