@@ -1,0 +1,22 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 234e440: no ABI change
+
+Leaf changes summary: 2 artifacts changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 4 added types
+Function symbols changes summary: 0 Removed, 0 Added function symbol not referenced by debug info
+Variable symbols changes summary: 0 Removed, 2 Added variable symbols not referenced by debug info
+
+2 Added variable symbols not referenced by debug info:
+
+  [A] _ZTIN9couchbase7tracing24boolean_tag_request_spanE
+  [A] _ZTSN9couchbase7tracing24boolean_tag_request_spanE
+
+4 added types unreachable from any public interface:
+
+  [A] 'class std::reverse_iterator<std::_Rb_tree_const_iterator<std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>>>'
+  [A] 'class std::reverse_iterator<std::_Rb_tree_iterator<std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>>>'
+  [A] 'struct std::_Node_insert_return<std::_Rb_tree_iterator<std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>>,std::_Node_handle<std::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>,std::allocator<std::_Rb_tree_node<std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>>>>>'
+  [A] 'struct std::unary_function<std::pair<conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>,bool>,conststd::__cxx11::basic_string<char,std::char_traits<char>,std::allocator<char>>>' at stl_function.h:120:1
+
