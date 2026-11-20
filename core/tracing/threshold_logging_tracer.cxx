@@ -126,6 +126,7 @@ struct reported_span {
 
 class threshold_logging_span
   : public couchbase::tracing::request_span
+  , public couchbase::tracing::boolean_tag_request_span
   , public std::enable_shared_from_this<threshold_logging_span>
 {
 private:
@@ -284,6 +285,8 @@ private:
   std::atomic<rollup_node*> rollup_head_{ nullptr };
 
 public:
+  using couchbase::tracing::request_span::add_tag;
+
   struct rollup_summary {
     std::uint64_t last_server_duration_us{ 0 };
     std::uint64_t total_server_duration_us{ 0 };
@@ -345,6 +348,10 @@ public:
     if (tag_name == tracing::attributes::dispatch::peer_address) {
       peer_hostname_ = value;
     }
+  }
+
+  void add_bool_tag(const std::string& /* tag_name */, bool /* value */) override
+  {
   }
 
   [[nodiscard]] auto try_set_dispatch_operation_id(std::uint32_t opaque) -> bool override

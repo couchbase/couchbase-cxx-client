@@ -22,7 +22,9 @@
 namespace couchbase::core::tracing
 {
 
-class noop_span : public couchbase::tracing::request_span
+class noop_span
+  : public couchbase::tracing::request_span
+  , public couchbase::tracing::boolean_tag_request_span
 {
   void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
   {
@@ -30,6 +32,11 @@ class noop_span : public couchbase::tracing::request_span
   }
 
   void add_tag(const std::string& /* name */, const std::string& /* value */) override
+  {
+    /* do nothing */
+  }
+
+  void add_bool_tag(const std::string& /* name */, bool /* value */) override
   {
     /* do nothing */
   }

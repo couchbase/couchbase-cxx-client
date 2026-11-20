@@ -66,8 +66,8 @@ span_owner::create_span(const std::shared_ptr<couchbase::tracing::request_tracer
         span->add_tag(key, val.value_string());
         break;
       case protocol::observability::Attribute::ValueCase::kValueBoolean:
-        throw performer_exception::unimplemented(
-          "The C++ SDK does not currently support boolean attribute values");
+        span->add_tag(key, val.value_boolean());
+        break;
       default:
         throw performer_exception::invalid_argument(
           fmt::format("Unexpected span attribute Value type: {}", val.DebugString()));

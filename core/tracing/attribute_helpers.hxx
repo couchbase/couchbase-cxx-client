@@ -22,8 +22,28 @@
 
 #include "constants.hxx"
 
+#include <cstdint>
+#include <memory>
+#include <string>
+
 namespace couchbase::core::tracing
 {
+inline void
+add_bool_tag(const std::shared_ptr<couchbase::tracing::request_span>& span,
+             const std::string& name,
+             bool value)
+{
+  if (!span->uses_tags()) {
+    return;
+  }
+  if (auto* bool_span = dynamic_cast<couchbase::tracing::boolean_tag_request_span*>(span.get());
+      bool_span != nullptr) {
+    bool_span->add_bool_tag(name, value);
+  } else {
+    span->add_tag(name, value ? std::uint64_t{ 1 } : std::uint64_t{ 0 });
+  }
+}
+
 void inline set_durability_level_attribute(
   const std::shared_ptr<couchbase::tracing::request_span>& span,
   const durability_level durability)

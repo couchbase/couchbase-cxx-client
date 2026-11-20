@@ -69,6 +69,12 @@ wrapper_sdk_span::add_tag(const std::string& name, const std::string& value)
 }
 
 void
+wrapper_sdk_span::add_bool_tag(const std::string& name, bool value)
+{
+  bool_tags_.insert_or_assign(name, value);
+}
+
+void
 wrapper_sdk_span::end()
 {
   end_time_ = std::chrono::system_clock::now();
@@ -84,6 +90,12 @@ auto
 wrapper_sdk_span::string_tags() const -> const std::map<std::string, std::string>&
 {
   return string_tags_;
+}
+
+auto
+wrapper_sdk_span::bool_tags() const -> const std::map<std::string, bool>&
+{
+  return bool_tags_;
 }
 
 auto

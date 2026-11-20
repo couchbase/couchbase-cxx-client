@@ -23,9 +23,13 @@
 
 namespace couchbase::tracing
 {
-class otel_request_span : public couchbase::tracing::request_span
+class otel_request_span
+  : public couchbase::tracing::request_span
+  , public couchbase::tracing::boolean_tag_request_span
 {
 public:
+  using couchbase::tracing::request_span::add_tag;
+
   explicit otel_request_span(opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> span)
     : span_(std::move(span))
   {
@@ -35,6 +39,10 @@ public:
     span_->SetAttribute(name, value);
   }
   void add_tag(const std::string& name, uint64_t value) override
+  {
+    span_->SetAttribute(name, value);
+  }
+  void add_bool_tag(const std::string& name, bool value) override
   {
     span_->SetAttribute(name, value);
   }
