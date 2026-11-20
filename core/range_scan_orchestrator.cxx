@@ -425,8 +425,9 @@ public:
         auto batch_time_limit =
           std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * self->options_.timeout);
         const range_scan_continue_options continue_options{
-          self->options_.batch_item_limit, self->options_.batch_byte_limit, batch_time_limit,
-          self->options_.timeout,          self->options_.retry_strategy,
+          self->options_.batch_item_limit, self->options_.batch_byte_limit,
+          self->options_.timeout,          batch_time_limit,
+          self->options_.retry_strategy,
         };
 
         for (std::uint16_t vbucket = 0;
