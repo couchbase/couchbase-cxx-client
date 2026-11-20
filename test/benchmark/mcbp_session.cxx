@@ -175,7 +175,34 @@ mcbp_protocol_key(state& st)
   });
 }
 
+// Constructing an mcbp_command instantiates its deadline handlers, which reach every member below.
+// The benchmark never starts a command, so none of them is called.
 struct stub_command_manager {
+  [[noreturn]] static void not_started()
+  {
+    throw std::logic_error("the benchmark never starts a command");
+  }
+
+  [[nodiscard]] auto deadlines() -> core::io::deadline_queue&
+  {
+    not_started();
+  }
+  [[nodiscard]] auto name() const -> const std::string&
+  {
+    not_started();
+  }
+  [[nodiscard]] auto log_prefix() const -> const std::string&
+  {
+    not_started();
+  }
+  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<core::orphan_reporter>
+  {
+    not_started();
+  }
+  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
+  {
+    not_started();
+  }
 };
 
 void
