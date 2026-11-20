@@ -1763,6 +1763,11 @@ public:
     return bootstrap_address_;
   }
 
+  void set_bootstrap_address(std::string address)
+  {
+    bootstrap_address_ = std::move(address);
+  }
+
   [[nodiscard]] auto bootstrap_hostname() const -> const std::string&
   {
     return bootstrap_hostname_;
@@ -2692,6 +2697,18 @@ auto
 mcbp_session_unit_test_api::pending_frames() const -> std::vector<std::vector<std::byte>>
 {
   return impl_->pending_frames();
+}
+
+void
+mcbp_session_unit_test_api::update_configuration(topology::configuration config) const
+{
+  impl_->update_configuration(std::move(config));
+}
+
+void
+mcbp_session_unit_test_api::set_bootstrap_address(std::string address) const
+{
+  impl_->set_bootstrap_address(std::move(address));
 }
 
 auto

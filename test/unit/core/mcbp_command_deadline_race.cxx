@@ -35,14 +35,17 @@
 
 #include "core/app_telemetry_meter.hxx"
 #include "core/bucket.hxx"
+#include "core/bucket_unit_test_api.hxx"
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_label_listener.hxx"
+#include "core/error_context/key_value.hxx"
 #include "core/error_context/key_value_status_code.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/impl/with_cancellation.hxx"
 #include "core/io/mcbp_command.hxx"
 #include "core/io/mcbp_session.hxx"
 #include "core/io/mcbp_session_unit_test_api.hxx"
+#include "core/logger/logger.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
 #include "core/operations/document_get.hxx"
@@ -52,6 +55,7 @@
 #include "core/protocol/client_opcode.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/tls_context_provider.hxx"
+#include "core/topology/configuration.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
@@ -84,6 +88,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <vector>
@@ -250,15 +255,7 @@ public:
         couchbase::core::origin{},
         std::vector<couchbase::core::protocol::hello_feature>{},
         nullptr) }
-    , session_{ "client-id",
-                "node-uuid",
-                io_,
-                couchbase::core::origin(
-                  couchbase::core::cluster_credentials{ "user", "pass" },
-                  couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1")),
-                std::make_shared<stub_bootstrap_listener>(),
-                "default",
-                { couchbase::core::protocol::hello_feature::collections } }
+    , session_{ make_session("127.0.0.1", "node-uuid") }
   {
     // A cached id sends the request without collection resolution.
     session_.update_collection_uid(named_collection_key().collection_path(), collection_uid);
@@ -268,6 +265,9 @@ public:
   {
     bucket_->close();
     session_.stop(couchbase::retry_reason::do_not_retry);
+    if (other_session_) {
+      other_session_->stop(couchbase::retry_reason::do_not_retry);
+    }
     // Ready handlers only: a case that failed before completing its command leaves the deadline
     // armed, and waiting for it would turn the failed assertion into a timeout.
     io_.restart();
@@ -355,16 +355,37 @@ public:
     return session_;
   }
 
-  // How many upserts the session holds written. A written request stays counted when its
+  // Registers session() and a second session, at another address, with the bucket, so that
+  // map_and_send() sends an any-session request to each in turn. Neither bootstraps.
+  void route_to_two_sessions()
+  {
+    other_session_.emplace(make_session("127.0.0.2", "other-node-uuid"));
+    other_session_->update_collection_uid(named_collection_key().collection_path(), collection_uid);
+    // Configured, so map_and_send() sends instead of deferring. Distinct addresses tell the
+    // attempts apart in an error context.
+    session_.unit_test_api().update_configuration({});
+    other_session_->unit_test_api().update_configuration({});
+    session_.unit_test_api().set_bootstrap_address("127.0.0.1:11210");
+    other_session_->unit_test_api().set_bootstrap_address("127.0.0.2:11210");
+    bucket_->unit_test_api().add_session(0, session_);
+    bucket_->unit_test_api().add_session(1, *other_session_);
+  }
+
+  // How many upserts the sessions hold written. A written request stays counted when its
   // subscription is withdrawn.
   [[nodiscard]] auto upserts_written() const -> std::size_t
   {
     return written(couchbase::core::protocol::client_opcode::upsert);
   }
 
+  // Counted over session() and, once routed, the second session.
   [[nodiscard]] auto written(couchbase::core::protocol::client_opcode opcode) const -> std::size_t
   {
-    const auto opcodes = session_.unit_test_api().pending_opcodes();
+    auto opcodes = session_.unit_test_api().pending_opcodes();
+    if (other_session_) {
+      const auto other = other_session_->unit_test_api().pending_opcodes();
+      opcodes.insert(opcodes.end(), other.begin(), other.end());
+    }
     return static_cast<std::size_t>(std::count(opcodes.begin(), opcodes.end(), opcode));
   }
 
@@ -392,12 +413,27 @@ public:
   }
 
 private:
+  [[nodiscard]] auto make_session(const std::string& host, const std::string& node_uuid)
+    -> mcbp_session
+  {
+    return { "client-id",
+             node_uuid,
+             io_,
+             couchbase::core::origin(
+               couchbase::core::cluster_credentials{ "user", "pass" },
+               couchbase::core::utils::parse_connection_string("couchbase://" + host)),
+             std::make_shared<stub_bootstrap_listener>(),
+             "default",
+             { couchbase::core::protocol::hello_feature::collections } };
+  }
+
   asio::io_context io_{};
   couchbase::core::tls_context_provider tls_{};
   std::shared_ptr<couchbase::core::orphan_reporter> orphans_;
   std::shared_ptr<couchbase::core::app_telemetry_meter> telemetry_;
   std::shared_ptr<bucket> bucket_;
   mcbp_session session_;
+  std::optional<mcbp_session> other_session_{};
 };
 
 // Runs `first` and `second` on two threads released together.
@@ -2499,6 +2535,473 @@ concurrent_replica_dispatch_spans_roll_up_to_one_threshold_parent_without_a_race
   assert_contains(
     report, R"("count":)" + std::to_string(expected_reports), "every operation span reports once");
 }
+// The error contexts a command's completion built, as bucket::execute() builds them.
+class context_log
+{
+public:
+  void add(couchbase::core::key_value_error_context ctx)
+  {
+    const std::scoped_lock lock(mutex_);
+    contexts_.push_back(std::move(ctx));
+  }
+
+  [[nodiscard]] auto count() const -> std::size_t
+  {
+    const std::scoped_lock lock(mutex_);
+    return contexts_.size();
+  }
+
+  [[nodiscard]] auto first() const -> couchbase::core::key_value_error_context
+  {
+    const std::scoped_lock lock(mutex_);
+    return contexts_.empty() ? couchbase::core::key_value_error_context{} : contexts_.front();
+  }
+
+private:
+  mutable std::mutex mutex_{};
+  std::vector<couchbase::core::key_value_error_context> contexts_{};
+};
+
+// A started command whose completion builds its error context with the handler bucket::execute()
+// installs.
+template<typename Request>
+[[nodiscard]] auto
+start_reporting(command_fixture& fixture, Request request, context_log& contexts)
+  -> std::shared_ptr<mcbp_command<bucket, Request>>
+{
+  auto cmd = std::make_shared<mcbp_command<bucket, Request>>(
+    fixture.io(), fixture.manager(), std::move(request), command_timeout);
+  cmd->start([weak_cmd = cmd->weak_from_this(), &contexts](std::error_code ec,
+                                                           std::optional<mcbp_message>&& msg) {
+    auto cmd = weak_cmd.lock();
+    if (!cmd) {
+      return;
+    }
+    using encoded_response_type = typename Request::encoded_response_type;
+    const std::uint16_t status_code = msg ? msg->header.status() : 0xffffU;
+    auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
+    contexts.add(couchbase::core::make_key_value_error_context(ec, status_code, cmd, resp));
+  });
+  return cmd;
+}
+
+[[nodiscard]] auto
+reports_no_attempt(const couchbase::core::key_value_error_context& ctx) -> bool
+{
+  return ctx.opaque() == 0 && !ctx.last_dispatched_to().has_value() &&
+         !ctx.last_dispatched_from().has_value() && !ctx.last_dispatched_to_node_id();
+}
+
+// Cancels from this thread while the dispatch on `dispatcher` is held in the encoder, between
+// begin_dispatch() and publish_dispatch(), then checks the context the completion built.
+template<typename Dispatch>
+void
+cancel_inside_the_window(command_fixture& fixture,
+                         context_log& contexts,
+                         const std::shared_ptr<mcbp_command<bucket, gated_upsert_request>>& cmd,
+                         const std::shared_ptr<encode_gate>& gate,
+                         bool is_timeout,
+                         couchbase::errc::common expected_timeout,
+                         Dispatch&& dispatch)
+{
+  std::thread dispatcher(std::forward<Dispatch>(dispatch));
+  const bool entered = gate->wait_until_entered();
+  if (entered) {
+    cmd->cancel(couchbase::retry_reason::do_not_retry, is_timeout);
+  }
+  gate->release();
+  dispatcher.join();
+  fixture.drain();
+
+  assert_true(entered, "the dispatch reached the encoder");
+  assert_eq(contexts.count(), std::size_t{ 1 }, "the cancellation completes the command");
+  const auto ctx = contexts.first();
+  assert_eq(
+    ctx.ec(),
+    std::error_code{ is_timeout ? expected_timeout : couchbase::errc::common::request_canceled },
+    "the cancellation's error");
+  // Reading them would race the dispatch, which assigned them for an attempt it never published.
+  assert_true(reports_no_attempt(ctx),
+              "a completion inside the dispatch window reports no opaque, address or node");
+}
+
+void
+an_error_context_built_inside_the_first_dispatch_reports_no_attempt([[maybe_unused]] context& ctx)
+{
+  for (const bool is_timeout : { true, false }) {
+    context_log contexts{};
+    command_fixture fixture{};
+    auto gate = std::make_shared<encode_gate>();
+    gated_upsert_request request{};
+    request.id = named_collection_key();
+    request.gate = gate;
+    auto cmd = start_reporting(fixture, std::move(request), contexts);
+
+    cancel_inside_the_window(fixture,
+                             contexts,
+                             cmd,
+                             gate,
+                             is_timeout,
+                             couchbase::errc::common::unambiguous_timeout,
+                             [&cmd, &fixture] {
+                               cmd->send_to(fixture.session());
+                             });
+  }
+}
+
+void
+an_error_context_built_inside_a_retried_dispatch_reports_no_attempt([[maybe_unused]] context& ctx)
+{
+  for (const bool is_timeout : { true, false }) {
+    context_log contexts{};
+    command_fixture fixture{};
+    auto gate = std::make_shared<encode_gate>();
+    gated_upsert_request request{};
+    request.id = named_collection_key();
+    request.gate = gate;
+    auto cmd = start_reporting(fixture, std::move(request), contexts);
+    const auto marker = fixture.session().next_opaque();
+
+    // The first attempt is written and published; the gate holds only the second.
+    std::thread first([&cmd, &fixture] {
+      cmd->send_to(fixture.session());
+    });
+    const bool entered = gate->wait_until_entered();
+    gate->release();
+    first.join();
+    assert_true(entered, "the first dispatch reached the encoder");
+    assert_eq(fixture.upserts_written(), std::size_t{ 1 }, "the first attempt is written");
+    auto retry_gate = std::make_shared<encode_gate>();
+    cmd->request.gate = retry_gate;
+
+    // The earlier attempt was written, so a timeout is ambiguous.
+    cancel_inside_the_window(fixture,
+                             contexts,
+                             cmd,
+                             retry_gate,
+                             is_timeout,
+                             couchbase::errc::common::ambiguous_timeout,
+                             [&cmd, &fixture] {
+                               cmd->send_to(fixture.session());
+                             });
+    static_cast<void>(fixture.withdraw_subscriptions_since(marker));
+  }
+}
+
+void
+an_error_context_built_inside_the_dispatch_after_a_collection_lookup_reports_no_attempt(
+  [[maybe_unused]] context& ctx)
+{
+  for (const bool is_timeout : { true, false }) {
+    context_log contexts{};
+    command_fixture fixture{};
+    auto gate = std::make_shared<encode_gate>();
+    gated_upsert_request request{};
+    // Not in the session's cache, so the first send() writes GetCollectionID and encodes nothing.
+    request.id = { "default", "inventory", "route", "key" };
+    request.gate = gate;
+    auto cmd = start_reporting(fixture, std::move(request), contexts);
+    cmd->send_to(fixture.session());
+    assert_eq(fixture.written(couchbase::core::protocol::client_opcode::get_collection_id),
+              std::size_t{ 1 },
+              "the dispatch writes GetCollectionID");
+    const auto lookup_opaque = cmd->opaque_.value();
+
+    // The lookup's answer runs send() on the session's thread, which the gate holds.
+    cancel_inside_the_window(
+      fixture,
+      contexts,
+      cmd,
+      gate,
+      is_timeout,
+      couchbase::errc::common::unambiguous_timeout,
+      [&fixture, lookup_opaque] {
+        static_cast<void>(fixture.session().unit_test_api().deliver_response(
+          couchbase::core::protocol::client_opcode::get_collection_id, 0, lookup_opaque));
+      });
+  }
+}
+
+void
+a_timeout_after_the_write_reports_the_written_attempt([[maybe_unused]] context& ctx)
+{
+  context_log contexts{};
+  command_fixture fixture{};
+  upsert_request request{};
+  request.id = named_collection_key();
+  auto cmd = start_reporting(fixture, std::move(request), contexts);
+  const auto marker = fixture.session().next_opaque();
+
+  cmd->send_to(fixture.session());
+  const auto first_opaque = cmd->request.opaque;
+  // A retry on the same session: the context names the later attempt.
+  cmd->send_to(fixture.session());
+  const auto written_opaque = cmd->request.opaque;
+  cmd->cancel(couchbase::retry_reason::do_not_retry);
+  static_cast<void>(fixture.withdraw_subscriptions_since(marker));
+
+  assert_eq(fixture.upserts_written(), std::size_t{ 2 }, "both attempts are written");
+  assert_true(first_opaque != written_opaque, "each attempt has its own opaque");
+  assert_eq(contexts.count(), std::size_t{ 1 }, "the timeout completes the command");
+  const auto reported = contexts.first();
+  assert_eq(reported.ec(),
+            std::error_code{ couchbase::errc::common::ambiguous_timeout },
+            "a mutation that was written");
+  assert_eq(reported.opaque(), written_opaque, "the opaque of the written request");
+  assert_true(reported.last_dispatched_to() ==
+                std::optional<std::string>{ fixture.session().bootstrap_address() },
+              "the address the request was written to");
+  assert_true(reported.last_dispatched_from() ==
+                std::optional<std::string>{ fixture.session().local_address() },
+              "the local address it was written from");
+  assert_true(static_cast<bool>(reported.last_dispatched_to_node_id()),
+              "the node the request was written to");
+}
+
+// Holds a worker until released, like encode_gate, through relaxed atomics only. Holding and
+// releasing order nothing, so ThreadSanitizer checks the held thread's writes against the accesses
+// the releasing thread makes meanwhile.
+class relaxed_gate
+{
+public:
+  // Bounded: a gate that is never released lets the worker go after the budget.
+  void enter_and_wait()
+  {
+    entered_.store(true, std::memory_order_relaxed);
+    const auto until =
+      std::chrono::steady_clock::now() + scaled_budget(std::chrono::milliseconds{ 1'000 });
+    while (!released_.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < until) {
+      std::this_thread::yield();
+    }
+  }
+
+  [[nodiscard]] auto wait_until_entered() const -> bool
+  {
+    const auto until =
+      std::chrono::steady_clock::now() + scaled_budget(std::chrono::milliseconds{ 1'000 });
+    while (!entered_.load(std::memory_order_relaxed)) {
+      if (std::chrono::steady_clock::now() >= until) {
+        return false;
+      }
+      std::this_thread::yield();
+    }
+    return true;
+  }
+
+  void release()
+  {
+    released_.store(true, std::memory_order_relaxed);
+  }
+
+private:
+  std::atomic_bool entered_{ false };
+  std::atomic_bool released_{ false };
+};
+
+// Registers a log callback for the life of the scope. A callback makes every log line format its
+// arguments, as trace logging does. The first line containing `hold_at` holds its thread at `gate`.
+class held_log_line
+{
+public:
+  held_log_line(std::shared_ptr<relaxed_gate> gate, std::string hold_at)
+  {
+    auto armed = std::make_shared<std::atomic_bool>(true);
+    couchbase::core::logger::register_log_callback(
+      [gate = std::move(gate), hold_at = std::move(hold_at), armed](
+        std::string_view message,
+        couchbase::core::logger::level /* level */,
+        couchbase::core::logger::log_location /* location */) {
+        if (message.find(hold_at) != std::string_view::npos && armed->exchange(false)) {
+          gate->enter_and_wait();
+        }
+      });
+    // Each thread looks the callback up under a mutex once after each registration. Looked up here
+    // first, the releasing thread takes no lock that the held thread released after its writes.
+    CB_LOG_DEBUG("log callback registered");
+  }
+
+  ~held_log_line()
+  {
+    couchbase::core::logger::unregister_log_callback();
+  }
+
+  held_log_line(const held_log_line&) = delete;
+  held_log_line(held_log_line&&) = delete;
+  auto operator=(const held_log_line&) -> held_log_line& = delete;
+  auto operator=(held_log_line&&) -> held_log_line& = delete;
+};
+
+// The opaque and addresses the command's latest attempt assigned, read once nothing dispatches.
+// Taken from session_, which the error context does not move from.
+struct written_attempt {
+  std::uint32_t opaque{};
+  std::optional<std::string> to{};
+  std::optional<std::string> from{};
+};
+
+[[nodiscard]] auto
+written_attempt_of(const std::shared_ptr<mcbp_command<bucket, upsert_request>>& cmd)
+  -> written_attempt
+{
+  if (!cmd->session_) {
+    return {};
+  }
+  return { cmd->request.opaque,
+           cmd->session_->bootstrap_address(),
+           cmd->session_->local_address() };
+}
+
+[[nodiscard]] auto
+reports_attempt(const couchbase::core::key_value_error_context& ctx, const written_attempt& attempt)
+  -> bool
+{
+  return ctx.opaque() == attempt.opaque && ctx.last_dispatched_to() == attempt.to &&
+         ctx.last_dispatched_from() == attempt.from &&
+         static_cast<bool>(ctx.last_dispatched_to_node_id());
+}
+
+[[nodiscard]] auto
+any_session_upsert() -> upsert_request
+{
+  upsert_request request{};
+  request.id = named_collection_key();
+  request.id.use_any_session(true);
+  return request;
+}
+
+void
+a_deadline_inside_a_retried_map_and_send_reports_the_earlier_attempt([[maybe_unused]] context& ctx)
+{
+  for (const bool is_timeout : { true, false }) {
+    context_log contexts{};
+    command_fixture fixture{};
+    fixture.route_to_two_sessions();
+    auto gate = std::make_shared<relaxed_gate>();
+    auto cmd = start_reporting(fixture, any_session_upsert(), contexts);
+
+    fixture.manager()->map_and_send(cmd);
+    const auto first = written_attempt_of(cmd);
+    assert_eq(fixture.upserts_written(), std::size_t{ 1 }, "the first attempt is written");
+    {
+      // The retry routes to the other session. Its trace line runs after routing and before
+      // send_to(), so the gate holds the retry before it begins a dispatch.
+      const held_log_line hold{ gate, "send operation" };
+      std::thread retry([&cmd, &fixture] {
+        fixture.manager()->map_and_send(cmd);
+      });
+      const bool entered = gate->wait_until_entered();
+      if (entered) {
+        cmd->cancel(couchbase::retry_reason::do_not_retry, is_timeout);
+      }
+      gate->release();
+      retry.join();
+      assert_true(entered, "the retry reached its trace line");
+    }
+    fixture.drain();
+
+    assert_eq(contexts.count(), std::size_t{ 1 }, "the cancellation completes the command");
+    // The earlier attempt is still published, so the context names it. An address assigned by the
+    // retry before its dispatch began would pair the other session with this opaque.
+    assert_true(reports_attempt(contexts.first(), first),
+                "the context reports the earlier attempt's opaque, addresses and node");
+  }
+}
+
+void
+a_deadline_racing_a_dispatch_reports_one_attempt_or_none([[maybe_unused]] context& ctx)
+{
+  std::deque<context_log> rounds{};
+  command_fixture fixture{};
+  fixture.route_to_two_sessions();
+  std::size_t not_completed_once{ 0 };
+  std::size_t mixed{ 0 };
+
+  for (int round = 0; round < race_rounds; ++round) {
+    auto& contexts = rounds.emplace_back();
+    auto cmd = start_reporting(fixture, any_session_upsert(), contexts);
+    const auto marker = fixture.session().next_opaque();
+    // Odd rounds race a retry of a written attempt, which routes to the other session; even rounds
+    // race the first dispatch. Half of each cancel as a bucket close does, without a timeout.
+    const bool retried = (round % 2) != 0;
+    const bool is_timeout = (round % 4) < 2;
+    written_attempt earlier{};
+    if (retried) {
+      fixture.manager()->map_and_send(cmd);
+      earlier = written_attempt_of(cmd);
+    }
+    const auto written_before = fixture.upserts_written();
+
+    race(
+      [&cmd, &fixture] {
+        fixture.manager()->map_and_send(cmd);
+      },
+      [&cmd, is_timeout] {
+        cmd->cancel(couchbase::retry_reason::do_not_retry, is_timeout);
+      });
+
+    fixture.drain();
+    static_cast<void>(fixture.withdraw_subscriptions_since(marker));
+    if (contexts.count() != 1) {
+      ++not_completed_once;
+      continue;
+    }
+    // The racing attempt is a whole attempt only if it was written. Short of that, its fields may
+    // be partly assigned, and the context must not report them.
+    const bool racing_written = fixture.upserts_written() > written_before;
+    const auto latest = written_attempt_of(cmd);
+    const auto reported = contexts.first();
+    if (!reports_no_attempt(reported) && !(retried && reports_attempt(reported, earlier)) &&
+        !(racing_written && reports_attempt(reported, latest))) {
+      ++mixed;
+    }
+  }
+
+  assert_eq(not_completed_once, std::size_t{ 0 }, "every round completes its command once");
+  assert_eq(mixed, std::size_t{ 0 }, "every context reports one attempt or none");
+}
+
+void
+a_deadline_completing_while_a_retry_decision_logs_the_command_shares_its_id(
+  [[maybe_unused]] context& ctx)
+{
+  for (const bool is_timeout : { true, false }) {
+    context_log contexts{};
+    command_fixture fixture{};
+    auto gate = std::make_shared<relaxed_gate>();
+    auto cmd =
+      start_reporting(fixture, upsert_with(std::make_shared<accept_every_retry>()), contexts);
+    cmd->send_to(fixture.session());
+    const auto opaque = cmd->request.opaque;
+    {
+      // The retry decision's log line builds id() for the first time, then holds its thread.
+      const held_log_line hold{ gate, "retrying operation" };
+      std::thread answer([&fixture, opaque] {
+        // The answer's handler hands temporary_failure to the retry orchestrator.
+        static_cast<void>(fixture.session().unit_test_api().deliver_response(
+          couchbase::core::protocol::client_opcode::upsert,
+          static_cast<std::uint16_t>(couchbase::core::key_value_status_code::temporary_failure),
+          opaque));
+      });
+      const bool entered = gate->wait_until_entered();
+      if (entered) {
+        // The completion builds the error context with id(), as a bucket close does too.
+        cmd->cancel(couchbase::retry_reason::do_not_retry, is_timeout);
+      }
+      gate->release();
+      answer.join();
+      assert_true(entered, "the retry decision reached its log line");
+    }
+    fixture.drain();
+
+    assert_eq(contexts.count(), std::size_t{ 1 }, "the cancellation completes the command");
+    // Under ThreadSanitizer, the completion reading the id_ the retry decision built is reported
+    // against id().
+    assert_eq(contexts.first().operation_id(),
+              cmd->id(),
+              "the context carries the identifier the retry decision built");
+  }
+}
+
 } // namespace
 
 auto
@@ -2603,6 +3106,24 @@ tests() -> test_suite
       { CASE(concurrent_replica_dispatch_spans_roll_up_to_one_threshold_parent_without_a_race),
         {},
         timeout::slow },
+      { CASE(an_error_context_built_inside_the_first_dispatch_reports_no_attempt),
+        {},
+        timeout::fast },
+      { CASE(an_error_context_built_inside_a_retried_dispatch_reports_no_attempt),
+        {},
+        timeout::fast },
+      { CASE(
+          an_error_context_built_inside_the_dispatch_after_a_collection_lookup_reports_no_attempt),
+        {},
+        timeout::fast },
+      { CASE(a_timeout_after_the_write_reports_the_written_attempt), {}, timeout::fast },
+      { CASE(a_deadline_inside_a_retried_map_and_send_reports_the_earlier_attempt),
+        {},
+        timeout::fast },
+      { CASE(a_deadline_racing_a_dispatch_reports_one_attempt_or_none), {}, timeout::slow },
+      { CASE(a_deadline_completing_while_a_retry_decision_logs_the_command_shares_its_id),
+        {},
+        timeout::fast },
     },
   };
 }

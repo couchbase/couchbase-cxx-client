@@ -111,10 +111,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   //   commits no write after it.
   // - state_written: the current attempt's write was committed and the server has not rejected it
   //   with unknown_collection, so the server may apply it.
-  // - state_published: session_ and opaque_ hold the current attempt and stay unchanged until the
-  //   next begin_dispatch(), which clears it before reassigning them. publish_dispatch() sets it
-  //   with release before collection resolution and before the write, and a claim that observes it
-  //   acquires them. A claim that does not observe it reads neither.
+  // - state_published: session_, opaque_, request.opaque, last_dispatched_to_ and
+  //   last_dispatched_from_ hold the current attempt and stay unchanged until the next
+  //   begin_dispatch(), which clears it before reassigning them. publish_dispatch() sets it with
+  //   release before collection resolution and before the write, and a claim that observes it
+  //   acquires them. A claim that does not observe it reads none of them. While a collection
+  //   lookup is published, request.opaque holds the document request's opaque, not yet written.
   // - state_earlier_written: an earlier attempt's write may have been applied. begin_dispatch()
   //   moves state_written here, and nothing clears it.
   //
@@ -145,8 +147,15 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   bool dispatch_span_closed_{ false };
   std::shared_ptr<Manager> manager_{};
   std::chrono::milliseconds timeout_{};
-  // Built lazily by id(); empty until first requested. See id().
+  // Built once by id(), on whichever thread asks first. See id().
+  mutable std::once_flag id_once_{};
+  mutable std::atomic_bool id_built_{ false };
   mutable std::string id_{};
+  // Set by complete() before it calls the handler, which reads it on the same thread: whether no
+  // dispatch can be assigning session_, request.opaque, last_dispatched_to_ and
+  // last_dispatched_from_, so that the handler may read them. That holds when the claim observed
+  // state_published, and when complete() runs on the dispatch path or in a response handler.
+  bool attempt_readable_{ false };
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
 #endif
@@ -186,18 +195,27 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   // The diagnostic identifier ("<opcode>/<uuid>") is used only in log lines,
   // retry traces, and the returned key_value error context — never on the wire.
   // It is built on first use and cached, so repeated readers -- a retry log line
-  // and then the completion's error context -- share one value. A completion with
-  // no error and a status code of 0 does not build it: make_key_value_error_context
-  // passes the cached value, possibly empty, and records the opcode instead. The
-  // identifier is built from that opcode only when an error is set later, by
-  // key_value_error_context::override_ec or make_subdocument_error_context. The cache
-  // is logically const, hence the mutable member and const accessor.
+  // and then the completion's error context -- share one value. The dispatch path
+  // and the completion can ask for it on different threads, so it is built once
+  // under id_once_. A completion with no error and a status code of 0 does not
+  // build it: make_key_value_error_context takes built_id(), possibly empty, and
+  // records the opcode instead. The identifier is built from that opcode only when
+  // an error is set later, by key_value_error_context::override_ec or
+  // make_subdocument_error_context. The cache is logically const, hence the mutable
+  // members and const accessors.
   [[nodiscard]] auto id() const -> const std::string&
   {
-    if (id_.empty()) {
+    std::call_once(id_once_, [this] {
       id_ = make_command_id(encoded_request_type::body_type::opcode);
-    }
+      id_built_.store(true, std::memory_order_release);
+    });
     return id_;
+  }
+
+  // The identifier if id() has built it, otherwise empty. Never builds it.
+  [[nodiscard]] auto built_id() const -> std::string
+  {
+    return id_built_.load(std::memory_order_acquire) ? id_ : std::string{};
   }
 
   void start(mcbp_command_handler&& handler)
@@ -324,7 +342,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       wire_response_.completed_by_answer = true;
     }
     // Callers run on the dispatch path or in a response handler, which are ordered after the writes
-    // to session_.
+    // to the attempt's fields, and no other dispatch can run beside them.
     complete(ec, std::move(msg), true, std::move(telemetry_recorder));
   }
 
@@ -760,6 +778,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     if (!begin_dispatch()) {
       return;
     }
+    // Assigned only after begin_dispatch(), which keeps a claim from reading them meanwhile.
+    last_dispatched_from_ = session.local_address();
+    last_dispatched_to_ = session.bootstrap_address();
     session_ = std::move(session);
     send();
   }
@@ -850,14 +871,14 @@ private:
 
   // Claims the one completion of this command and returns the state before the claim. Acquire pairs
   // with the release in publish_dispatch(), so a claim that observes state_published sees the
-  // session_ and opaque_ published with it.
+  // attempt's fields published with it.
   auto claim_completion() -> std::uint32_t
   {
     return state_.fetch_or(state_completed, std::memory_order_acquire);
   }
 
   // Starts a dispatch attempt. Returns false once a completion is claimed. Clearing state_published
-  // first keeps a claim from reading session_ and opaque_ while this attempt reassigns them. The
+  // first keeps a claim from reading the attempt's fields while this attempt reassigns them. The
   // previous attempt's state_written moves to state_earlier_written.
   //
   // Relaxed: this exchange publishes nothing to a claim and reads nothing a claim wrote. A claim
@@ -881,7 +902,7 @@ private:
   }
 
   // Sets `bits` (state_published, and state_written for the write itself). Returns false, and the
-  // attempt must stop, once a completion is claimed. Release publishes session_ and opaque_ to the
+  // attempt must stop, once a completion is claimed. Release publishes the attempt's fields to the
   // claim's acquire.
   [[nodiscard]] auto publish_dispatch(std::uint32_t bits) -> bool
   {
@@ -896,12 +917,14 @@ private:
   }
 
   // Runs once, after claim_completion() succeeds. Reads session_ only when session_readable is
-  // true; when telemetry_recorder is null, resolves counters from app_telemetry_meter.
+  // true, and passes that on to the handler as attempt_readable_; when telemetry_recorder is null,
+  // resolves counters from app_telemetry_meter.
   void complete(std::error_code ec,
                 std::optional<io::mcbp_message>&& msg,
                 bool session_readable,
                 std::shared_ptr<app_telemetry_value_recorder> telemetry_recorder = nullptr)
   {
+    attempt_readable_ = session_readable;
     // Ends the dispatch span no response handler took, before the caller can end its parent.
     // Closing prevents publication; a send() already inside create_dispatch_span() ends that span
     // itself, possibly after the caller has been answered. end() runs before the timeout is

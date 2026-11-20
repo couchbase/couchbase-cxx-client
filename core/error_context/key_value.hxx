@@ -79,13 +79,16 @@ make_key_value_error_context(std::error_code ec,
   const auto& collection = command->request.id.collection();
   const auto& scope = command->request.id.scope();
   const auto& bucket = command->request.id.bucket();
+  // Unless attempt_readable_ is set, a dispatch on another thread may be assigning the attempt's
+  // fields, so none of them is reported.
+  const bool attempt = command->attempt_readable_;
   std::uint32_t opaque =
-    (ec && response.opaque() == 0) ? command->request.opaque : response.opaque();
+    (ec && response.opaque() == 0 && attempt) ? command->request.opaque : response.opaque();
   std::optional<key_value_status_code> status{};
   std::optional<key_value_error_map_info> error_map_info{};
   if (status_code != 0xffffU) {
     status = response.status();
-    if (command->session_ && status_code > 0) {
+    if (attempt && command->session_ && status_code > 0) {
       error_map_info = command->session_->decode_error_code(status_code);
     }
   }
@@ -98,17 +101,23 @@ make_key_value_error_context(std::error_code ec,
   // "falsy = unknown" contract for not-yet-bound sessions by returning a
   // default node_id when the (uuid, host, port) inputs are all empty/zero.
   couchbase::node_id dispatched_to_node_id{};
-  if (command->session_) {
+  std::optional<std::string> last_dispatched_to{};
+  std::optional<std::string> last_dispatched_from{};
+  if (attempt) {
+    last_dispatched_to = std::move(command->last_dispatched_to_);
+    last_dispatched_from = std::move(command->last_dispatched_from_);
+  }
+  if (attempt && command->session_) {
     dispatched_to_node_id = internal_node_id::build(command->session_->node_uuid(),
                                                     command->session_->canonical_hostname(),
                                                     command->session_->canonical_port_number());
   }
 
   key_value_error_context ctx{
-    (ec || status_code != 0) ? command->id() : command->id_,
+    (ec || status_code != 0) ? command->id() : command->built_id(),
     ec,
-    std::move(command->last_dispatched_to_),
-    std::move(command->last_dispatched_from_),
+    std::move(last_dispatched_to),
+    std::move(last_dispatched_from),
     retry_attempts,
     std::move(retry_reasons),
     std::move(dispatched_to_node_id),
