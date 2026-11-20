@@ -259,16 +259,50 @@ public:
                        io::mcbp_message msg,
                        std::optional<key_value_error_map_info> error_info) override
   {
-    std::shared_ptr<mcbp::queue_response> resp{};
+    auto resp = decode_response(req, error, msg);
+    resolve_response(req, resp, error, reason, std::move(error_info));
+  }
+
+  auto decode_response(const std::shared_ptr<mcbp::queue_request>& req,
+                       std::error_code& error,
+                       io::mcbp_message& msg) -> std::shared_ptr<mcbp::queue_response>
+  {
     auto header = msg.header_data();
     auto [packet, size, err] =
       codec_.decode_packet(gsl::span(header.data(), header.size()), msg.body);
     if (err) {
       error = errc::network::protocol_error;
-    } else {
-      resp = std::make_shared<mcbp::queue_response>(std::move(packet));
+      return nullptr;
     }
-    resolve_response(req, resp, error, reason, std::move(error_info));
+    req->record_dispatch_response(packet.server_duration_frame_.has_value()
+                                    ? packet.server_duration_frame_->server_duration
+                                    : std::chrono::microseconds::zero(),
+                                  packet.status_code_ != key_value_status_code::success);
+    return std::make_shared<mcbp::queue_response>(std::move(packet));
+  }
+
+  void start_dispatch_span(const std::shared_ptr<mcbp::queue_request>& req,
+                           const io::mcbp_session& session)
+  {
+    if (!tracer_ || !req->parent_span_) {
+      return;
+    }
+    auto span = tracer_->create_span(tracing::operation::step_dispatch, req->parent_span_);
+    if (span->uses_tags()) {
+      span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      if (!span->try_set_dispatch_operation_id(req->opaque_)) {
+        span->add_tag(tracing::attributes::dispatch::operation_id,
+                      fmt::format("0x{:x}", req->opaque_));
+      }
+      if (!span->try_set_dispatch_local_id(session.id())) {
+        span->add_tag(tracing::attributes::dispatch::local_id, session.id());
+      }
+    }
+    req->set_dispatch_span(std::move(span),
+                           session.remote_hostname(),
+                           session.remote_port(),
+                           session.canonical_hostname(),
+                           session.canonical_port_number());
   }
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code
@@ -321,6 +355,7 @@ public:
       return errc::common::service_not_available;
     }
     req->opaque_ = session->next_opaque();
+    start_dispatch_span(req, session.value());
     session->write_and_subscribe(req, shared_from_this());
     return {};
   }
@@ -376,25 +411,18 @@ public:
       handle_error(data.error());
       return data.error();
     }
-    session->write_and_subscribe(
-      req->opaque_,
-      std::move(data.value()),
-      [self = shared_from_this(), req, session](
-        std::error_code error,
-        retry_reason reason,
-        io::mcbp_message msg,
-        std::optional<key_value_error_map_info> error_info) {
-        std::shared_ptr<mcbp::queue_response> resp{};
-        auto header = msg.header_data();
-        auto [packet, size, err] =
-          self->codec_.decode_packet(gsl::span(header.data(), header.size()), msg.body);
-        if (err) {
-          error = errc::network::protocol_error;
-        } else {
-          resp = std::make_shared<mcbp::queue_response>(std::move(packet));
-        }
-        return self->resolve_response(req, resp, error, reason, std::move(error_info));
-      });
+    start_dispatch_span(req, session.value());
+    session->write_and_subscribe(req->opaque_,
+                                 std::move(data.value()),
+                                 [self = shared_from_this(), req, session](
+                                   std::error_code error,
+                                   retry_reason reason,
+                                   io::mcbp_message msg,
+                                   std::optional<key_value_error_map_info> error_info) {
+                                   auto resp = self->decode_response(req, error, msg);
+                                   return self->resolve_response(
+                                     req, resp, error, reason, std::move(error_info));
+                                 });
     return {};
   }
 

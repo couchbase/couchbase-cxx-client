@@ -22,11 +22,16 @@
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
+#include <couchbase/tracing/request_span.hxx>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <future>
+#include <map>
 #include <memory>
+#include <string>
 #include <system_error>
 
 namespace couchbase::test
@@ -211,7 +216,6 @@ span_fields_default_to_null([[maybe_unused]] context& ctx)
   });
 
   assert_true(req->parent_span_ == nullptr, "a request with no tracing carries no parent span");
-  assert_true(req->dispatch_span_ == nullptr, "a request that has not been dispatched has no span");
 }
 
 // The three cases below cover the seam itself: the KV response path in bucket_impl::
@@ -303,6 +307,92 @@ an_error_ends_a_persistent_request_after_delivering_it([[maybe_unused]] context&
   req->try_callback(nullptr, {});
   assert_eq(call_count.load(), 2, "the error completed the request, so nothing follows it");
 }
+class recording_span : public couchbase::tracing::request_span
+{
+public:
+  recording_span()
+    : request_span("dispatch_to_server")
+  {
+  }
+
+  void add_tag(const std::string& name, std::uint64_t value) override
+  {
+    int_tags[name] = value;
+  }
+
+  void add_tag(const std::string& name, const std::string& value) override
+  {
+    string_tags[name] = value;
+  }
+
+  void end() override
+  {
+    ++end_count;
+  }
+
+  std::map<std::string, std::uint64_t> int_tags{};
+  std::map<std::string, std::string> string_tags{};
+  int end_count{ 0 };
+};
+
+void
+a_dispatch_span_ends_on_the_response([[maybe_unused]] context& ctx)
+{
+  auto req = make_get_request([](auto /*resp*/, auto /*req*/, auto /*ec*/) {
+  });
+  auto span = std::make_shared<recording_span>();
+  req->set_dispatch_span(span, "peer", 11210, "server", 11210);
+
+  req->record_dispatch_response(std::chrono::microseconds{ 7 }, true);
+  assert_eq(span->end_count, 1, "a response ends the span of a non-persistent request");
+  assert_eq(span->int_tags["couchbase.server_duration"],
+            std::uint64_t{ 7 },
+            "the span records the server duration");
+
+  req->try_callback(nullptr, {});
+  assert_eq(span->end_count, 1, "completing the request does not end the span again");
+}
+
+void
+a_persistent_dispatch_span_sums_every_frame_and_ends_at_the_final_one([[maybe_unused]] context& ctx)
+{
+  auto req = make_get_request([](auto /*resp*/, auto /*req*/, auto /*ec*/) {
+  });
+  req->persistent_ = true;
+  auto span = std::make_shared<recording_span>();
+  req->set_dispatch_span(span, "peer", 11210, "server", 11210);
+
+  req->record_dispatch_response(std::chrono::microseconds{ 3 }, false);
+  req->record_dispatch_response(std::chrono::microseconds{ 4 }, false);
+  assert_eq(span->end_count, 0, "a persistent request keeps its span open between frames");
+
+  req->record_dispatch_response(std::chrono::microseconds{ 2 }, true);
+  assert_eq(span->end_count, 1, "the final frame ends the span");
+  assert_eq(span->int_tags["couchbase.server_duration"],
+            std::uint64_t{ 9 },
+            "the span records the sum over all frames");
+
+  assert_true(req->internal_cancel(), "the final frame's handler completes the request");
+  assert_eq(span->end_count, 1, "completion does not end the span again");
+}
+
+void
+a_dispatch_span_without_a_response_ends_on_cancel_with_no_result([[maybe_unused]] context& ctx)
+{
+  auto req = make_get_request([](auto /*resp*/, auto /*req*/, auto /*ec*/) {
+  });
+  auto span = std::make_shared<recording_span>();
+  req->set_dispatch_span(span, "peer", 11210, "server", 11210);
+
+  req->cancel(couchbase::errc::common::unambiguous_timeout);
+  assert_eq(span->end_count, 1, "cancellation ends the span");
+  assert_true(span->int_tags.count("couchbase.server_duration") == 0,
+              "an unanswered attempt records no server duration");
+
+  auto late = std::make_shared<recording_span>();
+  req->set_dispatch_span(late, "peer", 11210, "server", 11210);
+  assert_eq(late->end_count, 1, "a span set after completion is ended at once");
+}
 } // namespace
 
 auto
@@ -327,6 +417,9 @@ tests() -> test_suite
       { CASE(an_unknown_collection_hook_that_declines_reports_false) },
       { CASE(a_persistent_request_delivers_every_successful_response) },
       { CASE(an_error_ends_a_persistent_request_after_delivering_it) },
+      { CASE(a_dispatch_span_ends_on_the_response) },
+      { CASE(a_persistent_dispatch_span_sums_every_frame_and_ends_at_the_final_one) },
+      { CASE(a_dispatch_span_without_a_response_ends_on_cancel_with_no_result) },
     },
   };
 }
