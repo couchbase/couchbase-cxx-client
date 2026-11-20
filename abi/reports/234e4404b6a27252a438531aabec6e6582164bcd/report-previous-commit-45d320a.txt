@@ -1,0 +1,20 @@
+libcouchbase_cxx_client.so.1.5 against previous commit 45d320a: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 1 changed, 0 added type
+
+1 changed type unreachable from any public interface:
+
+  [C] 'struct {type& ____f;}' changed:
+    type size changed from 64 to 256 (in bits)
+    3 data member insertions:
+      '_State_baseV2*& ____args#0', at offset 64 (in bits) at mutex:912:1
+      'function<std::unique_ptr<std::__future_base::_Result_base,std::__future_base::_Result_base::_Deleter>()>*& ____args#1', at offset 128 (in bits) at mutex:912:1
+      'bool*& ____args#2', at offset 192 (in bits) at mutex:912:1
+    there are data member changes:
+      type 'type&' of 'std::__anonymous_struct__::____f' changed:
+        reference type changed from: 'type&' to: 'void (std::__future_base::_State_baseV2::*)(std::function<std::unique_ptr<std::__future_base::_Result_base,std::__future_base::_Result_base::_Deleter>()>*, bool*)&'
+
