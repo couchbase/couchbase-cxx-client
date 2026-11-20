@@ -270,6 +270,14 @@ if(NOT TARGET llhttp::llhttp)
   couchbase_optimize_third_party_directory("${llhttp_SOURCE_DIR}")
 endif()
 
+
+if(NOT TARGET snappy AND DEFINED Snappy_DIR)
+  find_package(Snappy QUIET)
+  if(TARGET Snappy::snappy)
+    add_library(snappy ALIAS Snappy::snappy)
+  endif()
+endif()
+
 if(NOT TARGET snappy)
   # https://github.com/google/snappy/releases
   cpmaddpackage(
@@ -293,9 +301,11 @@ if(NOT TARGET snappy)
     "SNAPPY_BUILD_BENCHMARKS OFF")
   couchbase_optimize_third_party_directory("${snappy_SOURCE_DIR}")
 endif()
-if(NOT MSVC)
-  # https://github.com/google/snappy/pull/156
-  target_compile_options(snappy PRIVATE -Wno-sign-compare)
+if(NOT TARGET Snappy::snappy)
+  if(NOT MSVC)
+    # https://github.com/google/snappy/pull/156
+    target_compile_options(snappy PRIVATE -Wno-sign-compare)
+  endif()
 endif()
 
 if(NOT TARGET taocpp::json)
