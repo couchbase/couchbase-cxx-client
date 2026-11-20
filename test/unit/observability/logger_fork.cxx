@@ -28,10 +28,13 @@
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/null_sink.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <climits>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -87,11 +90,12 @@ namespace
 constexpr std::chrono::seconds child_deadline{ 20 };
 
 // The child's exit status, 128 plus the signal that ended it, or -1 when it did not exit within
-// the deadline and was killed.
+// the deadline and was killed. Every wait in this file goes through scaled_budget(), so it grows
+// with the case budget under valgrind and stays below it.
 auto
 wait_for_child(pid_t child_pid) -> int
 {
-  const auto deadline = std::chrono::steady_clock::now() + child_deadline;
+  const auto deadline = std::chrono::steady_clock::now() + scaled_budget(child_deadline);
   int status{};
   while (std::chrono::steady_clock::now() < deadline) {
     const auto rc = waitpid(child_pid, &status, WNOHANG);
@@ -155,7 +159,8 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds{ 50 });
       }
     });
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 10 };
+    const auto deadline =
+      std::chrono::steady_clock::now() + scaled_budget(std::chrono::seconds{ 10 });
     while (sequence_ < 500 && std::chrono::steady_clock::now() < deadline) {
       std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
     }
@@ -226,7 +231,8 @@ fork_while_logging(const Child& child) -> forked_child
 auto
 read_until(const std::filesystem::path& base, std::string_view marker) -> std::string
 {
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 10 };
+  const auto deadline =
+    std::chrono::steady_clock::now() + scaled_budget(std::chrono::seconds{ 10 });
   while (true) {
     core::logger::flush();
     auto logs = read_logs(base);
@@ -428,12 +434,14 @@ a_child_forked_during_an_error_report_does_not_deadlock_in_the_error_handler(
                        &writer_blocked,
                        &writer_returned,
                        &writer_at_drain]() {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 10 };
+    const auto deadline =
+      std::chrono::steady_clock::now() + scaled_budget(std::chrono::seconds{ 10 });
     while (!writer_blocked && std::chrono::steady_clock::now() < deadline) {
       std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
     }
     pollfd started{ started_fd, POLLIN, 0 };
-    poll(&started, 1, 2000);
+    const auto started_wait = scaled_budget(std::chrono::seconds{ 2 }).count();
+    poll(&started, 1, static_cast<int>(std::min<std::int64_t>(started_wait, INT_MAX)));
     writer_at_drain = writer_returned ? 2 : 1;
     std::array<char, 4096> buffer{};
     while (read(read_fd, buffer.data(), buffer.size()) > 0) {
@@ -452,7 +460,8 @@ a_child_forked_during_an_error_report_does_not_deadlock_in_the_error_handler(
   } };
   // a byte in the pipe means the writer is in the handler, where the report keeps it until the
   // drain
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 10 };
+  const auto deadline =
+    std::chrono::steady_clock::now() + scaled_budget(std::chrono::seconds{ 10 });
   int pending = 0;
   while ((ioctl(pipe_fds[0], FIONREAD, &pending) != 0 || pending == 0) &&
          std::chrono::steady_clock::now() < deadline) {
@@ -533,7 +542,7 @@ the_parent_keeps_flushing_periodically_after_a_fork([[maybe_unused]] context& ct
     return 0;
   });
   CB_LOG_INFO("parent {} logs after the fork", getpid());
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 5 };
+  const auto deadline = std::chrono::steady_clock::now() + scaled_budget(std::chrono::seconds{ 5 });
   auto logs = read_logs(directory / "parent");
   while (logs.find("logs after the fork") == std::string::npos &&
          std::chrono::steady_clock::now() < deadline) {
