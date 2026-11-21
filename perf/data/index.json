@@ -1,5 +1,12 @@
 [
   {
+    "id": "a96ccf11b3f5bca353a19acac5140dd00cf0d1f4-20261121T010220Z",
+    "sha": "a96ccf11b3f5bca353a19acac5140dd00cf0d1f4",
+    "date": "2026-11-21T00:24:32Z",
+    "run": "2026-11-21T01:02:20Z",
+    "cpu_model": "AMD EPYC 9V45 96-Core Processor"
+  },
+  {
     "id": "3292ec75dfac660562d4b77c9c460cb611283d57-20261120T225731Z",
     "sha": "3292ec75dfac660562d4b77c9c460cb611283d57",
     "date": "2026-11-20T22:14:18Z",
