@@ -47,6 +47,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -121,12 +122,31 @@ public:
     , result_{ result }
     , on_complete_{ std::move(on_complete) }
   {
+  }
+
+  void accept()
+  {
     acceptor_.async_accept(socket_, [this](std::error_code ec) {
       if (ec) {
         return;
       }
       read_handshake();
     });
+  }
+
+  // Accepts a connection already in the listen backlog, without waiting for one. Returns whether
+  // there was one; serve() then answers it.
+  [[nodiscard]] auto try_accept() -> bool
+  {
+    std::error_code ec;
+    acceptor_.non_blocking(true, ec);
+    acceptor_.accept(socket_, ec);
+    return !ec;
+  }
+
+  void serve()
+  {
+    read_handshake();
   }
 
   [[nodiscard]] auto port() const -> std::uint16_t
@@ -379,6 +399,7 @@ collect_telemetry(
                                   }
                                   collector.close();
                                 } };
+  collector.accept();
 
   auto origin = make_origin(collector.port());
   reporter = std::make_unique<couchbase::core::app_telemetry_reporter>(meter, origin, io, tls);
@@ -561,6 +582,76 @@ cluster_config_endpoint_with_jwt_credentials_sends_bearer_authorization(context&
                          "sdk_kv_r_total{",
                          "recorded metrics reach the cluster-configured endpoint");
 }
+
+#ifndef _WIN32
+// IOCP gives no order between a completed connect and an expired timer, and the case needs the
+// connect handled first.
+void
+a_connect_deadline_expiring_with_the_connect_does_not_end_the_session(context& /* ctx */)
+{
+  constexpr auto connect_timeout = 50ms;
+  captured_exchange result{};
+  asio::io_context io{};
+  asio::steady_timer give_up{ io };
+  const auto meter = std::make_shared<couchbase::core::app_telemetry_meter>();
+  couchbase::core::tls_context_provider tls{};
+
+  std::unique_ptr<couchbase::core::app_telemetry_reporter> reporter{};
+  telemetry_collector collector{ io, result, [&]() {
+                                  give_up.cancel();
+                                  if (reporter) {
+                                    reporter->stop();
+                                  }
+                                  collector.close();
+                                } };
+
+  couchbase::core::cluster_options options{};
+  options.enable_app_telemetry = true;
+  options.connect_timeout = connect_timeout;
+  options.app_telemetry_endpoint = fmt::format("ws://127.0.0.1:{}/collect", collector.port());
+  couchbase::core::origin origin{ password_credentials(), "127.0.0.1", 11210, options };
+  reporter = std::make_unique<couchbase::core::app_telemetry_reporter>(meter, origin, io, tls);
+  reporter->update_config(cluster_config_with_collector(18091, "/_p/appTelemetry"));
+  meter->value_recorder("node-1", "default")
+    ->update_counter(couchbase::core::app_telemetry_counter::kv_r_total);
+
+  give_up.expires_after(4s);
+  give_up.async_wait([&](std::error_code ec) {
+    if (ec != asio::error::operation_aborted) {
+      reporter->stop();
+      collector.close();
+      io.stop();
+    }
+  });
+
+  // One handler at a time until the dialer's connection reaches the backlog: the handler that
+  // issued it has armed the connect deadline. Waiting past the deadline before the io_context runs
+  // again makes the connect completion and the expired deadline wait together. The epoll and kqueue
+  // reactors then run the connect handler first, and the deadline must not reconnect a dialer that
+  // has handed its stream to the session.
+  bool connected = false;
+  while (!(connected = collector.try_accept()) && io.run_one_for(1s) > 0) {
+  }
+  std::this_thread::sleep_for(4 * connect_timeout);
+  if (connected) {
+    collector.serve();
+  }
+  io.run();
+
+  reporter->stop();
+  collector.close();
+  give_up.cancel();
+  io.restart();
+  io.run_for(1s);
+
+  assert_true(connected, "the dialer connected to the collector");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "the session that the connect handed its stream to answers GET_TELEMETRY");
+  assert_report_contains(
+    result.telemetry_report, "sdk_kv_r_total{", "recorded metrics reach the collector");
+}
+#endif
 } // namespace
 
 auto
@@ -575,6 +666,9 @@ tests() -> test_suite
       { CASE(connection_string_endpoint_omits_authorization_and_delivers_telemetry) },
       { CASE(cluster_config_endpoint_with_password_credentials_sends_basic_authorization) },
       { CASE(cluster_config_endpoint_with_jwt_credentials_sends_bearer_authorization) },
+#ifndef _WIN32
+      { CASE(a_connect_deadline_expiring_with_the_connect_does_not_end_the_session) },
+#endif
     },
   };
 }

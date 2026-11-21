@@ -141,22 +141,36 @@ private:
     }
   }
 
+  // A handler acts only for the step it was started in, and only until the dialer completes. A
+  // cancel does not reach an operation that has already completed, and its handler still runs, so
+  // the deadline and the operation of one step can both run, and either can run after the dialer
+  // completed or stopped.
+  [[nodiscard]] auto is_current(std::uint64_t step) const -> bool
+  {
+    return handler_ != nullptr && step == step_;
+  }
+
   void reconnect_socket(std::error_code reconnect_reason, const std::string& message)
   {
     last_error_ = reconnect_reason;
-    stream_->close([self = shared_from_this(), message, reconnect_reason](std::error_code ec) {
-      if (ec) {
-        CB_LOG_WARNING(
-          "unable to close app telemetry socket, but continue reconnecting anyway.  {}",
-          tao::json::to_string(tao::json::value{
-            { "message", message },
-            { "reconnect_reason",
-              fmt::format("{}, {}", reconnect_reason.value(), reconnect_reason.message()) },
-            { "ec", fmt::format("{}, {}", ec.value(), ec.message()) },
-          }));
-      }
-      self->connect_socket();
-    });
+    const auto step = ++step_;
+    stream_->close(
+      [self = shared_from_this(), message, reconnect_reason, step](std::error_code ec) {
+        if (!self->is_current(step)) {
+          return;
+        }
+        if (ec) {
+          CB_LOG_WARNING(
+            "unable to close app telemetry socket, but continue reconnecting anyway.  {}",
+            tao::json::to_string(tao::json::value{
+              { "message", message },
+              { "reconnect_reason",
+                fmt::format("{}, {}", reconnect_reason.value(), reconnect_reason.message()) },
+              { "ec", fmt::format("{}, {}", ec.value(), ec.message()) },
+            }));
+        }
+        self->connect_socket();
+      });
   }
 
   void connect_socket()
@@ -168,10 +182,11 @@ private:
       return complete_with_error(last_error_, "no more endpoints to connect");
     }
     auto endpoint = next_endpoint_++;
+    const auto step = ++step_;
 
     connect_deadline_.expires_after(options_.connect_timeout);
-    connect_deadline_.async_wait([self = shared_from_this()](auto ec) {
-      if (ec == asio::error::operation_aborted) {
+    connect_deadline_.async_wait([self = shared_from_this(), step](auto ec) {
+      if (ec == asio::error::operation_aborted || !self->is_current(step)) {
         return;
       }
       return self->reconnect_socket(ec, "connect deadline");
@@ -183,7 +198,10 @@ private:
       stream_ = std::make_unique<io::plain_stream_impl>(ctx_);
     }
     stream_->async_connect(
-      endpoint->endpoint(), address_.hostname, [self = shared_from_this()](auto ec) {
+      endpoint->endpoint(), address_.hostname, [self = shared_from_this(), step](auto ec) {
+        if (!self->is_current(step)) {
+          return;
+        }
         if (ec) {
           return self->reconnect_socket(ec, "connection failure");
         }
@@ -193,9 +211,10 @@ private:
 
   void resolve_address()
   {
+    const auto step = step_;
     resolve_deadline_.expires_after(options_.resolve_timeout);
-    resolve_deadline_.async_wait([self = shared_from_this()](auto ec) {
-      if (ec == asio::error::operation_aborted) {
+    resolve_deadline_.async_wait([self = shared_from_this(), step](auto ec) {
+      if (ec == asio::error::operation_aborted || !self->is_current(step)) {
         return;
       }
       return self->complete_with_error(errc::common::unambiguous_timeout, "timeout on resolve");
@@ -204,7 +223,10 @@ private:
                       resolver_,
                       address_.hostname,
                       address_.service,
-                      [self = shared_from_this()](auto ec, const auto& endpoints) {
+                      [self = shared_from_this(), step](auto ec, const auto& endpoints) {
+                        if (!self->is_current(step)) {
+                          return;
+                        }
                         self->resolve_deadline_.cancel();
                         if (ec) {
                           CB_LOG_DEBUG("failed to resolve address for app telemetry socket.  {}",
@@ -229,7 +251,10 @@ private:
   asio::steady_timer resolve_deadline_;
   asio::steady_timer connect_deadline_;
   asio::ip::tcp::resolver resolver_;
+  // Null once the dialer has completed: is_current() is false for every step from then on.
   std::shared_ptr<connection_state_listener> handler_;
+  // Resolution, then one step per connect attempt and per close before a reconnect.
+  std::uint64_t step_{ 0 };
   std::error_code last_error_{};
   std::unique_ptr<io::stream_impl> stream_{};
   asio::ip::tcp::resolver::results_type endpoints_{};
