@@ -18,10 +18,12 @@
 #include "queue_request.hxx"
 
 #include "../operation_map.hxx"
+#include "core/tracing/constants.hxx"
 #include "operation_queue.hxx"
 #include "queue_response.hxx"
 
 #include <couchbase/error_codes.hxx>
+#include <couchbase/tracing/request_span.hxx>
 
 #include <spdlog/fmt/bundled/core.h>
 
@@ -107,23 +109,27 @@ cancel_timer(std::shared_ptr<asio::steady_timer> timer)
 auto
 queue_request::internal_cancel() -> bool
 {
-  const std::scoped_lock lock(processing_mutex_);
+  {
+    const std::scoped_lock lock(processing_mutex_);
 
-  if (bool expected_state{ false }; !is_completed_.compare_exchange_strong(expected_state, true)) {
-    // someone already completed this request
-    return false;
+    if (bool expected_state{ false };
+        !is_completed_.compare_exchange_strong(expected_state, true)) {
+      // someone already completed this request
+      return false;
+    }
+
+    cancel_timer(deadline_);
+    cancel_timer(retry_backoff_);
+
+    if (auto* queued_with = queued_with_.load(); queued_with) {
+      queued_with->remove(shared_from_this());
+    }
+    if (auto* waiting_in = waiting_in_.load(); waiting_in) {
+      waiting_in->remove_request(shared_from_this());
+    }
   }
 
-  cancel_timer(deadline_);
-  cancel_timer(retry_backoff_);
-
-  if (auto* queued_with = queued_with_.load(); queued_with) {
-    queued_with->remove(shared_from_this());
-  }
-  if (auto* waiting_in = waiting_in_.load(); waiting_in) {
-    waiting_in->remove_request(shared_from_this());
-  }
-
+  end_dispatch_span();
   return true;
 }
 
@@ -153,6 +159,78 @@ queue_request::set_retry_backoff(std::shared_ptr<asio::steady_timer> timer)
 }
 
 void
+queue_request::set_dispatch_span(std::shared_ptr<couchbase::tracing::request_span> span,
+                                 std::string peer_address,
+                                 std::uint16_t peer_port,
+                                 std::string server_address,
+                                 std::uint16_t server_port)
+{
+  dispatch_attempt attempt{
+    std::move(span), std::move(peer_address), peer_port, std::move(server_address), server_port,
+  };
+  {
+    const std::scoped_lock lock(dispatch_mutex_);
+    // A request completed before this attempt was traced has nothing left to end its span.
+    if (!is_completed_) {
+      std::swap(attempt, dispatch_attempt_);
+    }
+  }
+  end_dispatch_span(std::move(attempt));
+}
+
+void
+queue_request::record_dispatch_response(std::chrono::microseconds server_duration, bool final_frame)
+{
+  dispatch_attempt attempt{};
+  {
+    const std::scoped_lock lock(dispatch_mutex_);
+    if (!dispatch_attempt_.span) {
+      return;
+    }
+    dispatch_attempt_.server_duration =
+      dispatch_attempt_.server_duration.value_or(std::chrono::microseconds::zero()) +
+      server_duration;
+    if (!persistent_ || final_frame) {
+      std::swap(attempt, dispatch_attempt_);
+    }
+  }
+  end_dispatch_span(std::move(attempt));
+}
+
+void
+queue_request::end_dispatch_span()
+{
+  dispatch_attempt attempt{};
+  {
+    const std::scoped_lock lock(dispatch_mutex_);
+    std::swap(attempt, dispatch_attempt_);
+  }
+  end_dispatch_span(std::move(attempt));
+}
+
+void
+queue_request::end_dispatch_span(dispatch_attempt attempt)
+{
+  const auto& span = attempt.span;
+  if (!span) {
+    return;
+  }
+  // An attempt that got no response, because it was cancelled or timed out, carries no result.
+  if (attempt.server_duration.has_value() && span->uses_tags()) {
+    const auto server_duration_us = static_cast<std::uint64_t>(attempt.server_duration->count());
+    if (!span->try_set_dispatch_result(
+          server_duration_us, attempt.peer_address, attempt.peer_port)) {
+      span->add_tag(tracing::attributes::dispatch::server_duration, server_duration_us);
+      span->add_tag(tracing::attributes::dispatch::peer_address, attempt.peer_address);
+      span->add_tag(tracing::attributes::dispatch::peer_port, attempt.peer_port);
+    }
+    span->add_tag(tracing::attributes::dispatch::server_address, attempt.server_address);
+    span->add_tag(tracing::attributes::dispatch::server_port, attempt.server_port);
+  }
+  span->end();
+}
+
+void
 queue_request::try_callback(std::shared_ptr<queue_response> response, std::error_code error)
 {
   {
@@ -174,6 +252,7 @@ queue_request::try_callback(std::shared_ptr<queue_response> response, std::error
     return;
   }
   if (bool expected_state{ false }; is_completed_.compare_exchange_strong(expected_state, true)) {
+    end_dispatch_span();
     // Move callback_ before invoking to release any captured state (e.g. shared_ptr cycles)
     // as soon as the callback returns.
     auto cb = std::move(callback_);

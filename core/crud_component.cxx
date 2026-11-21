@@ -75,15 +75,8 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
     body["collection"] = fmt::format("{:x}", options.collection_id);
   }
 
-  if (std::holds_alternative<range_scan>(options.scan_type) ||
-      std::holds_alternative<prefix_scan>(options.scan_type)) {
-    const auto& range = (std::holds_alternative<range_scan>(options.scan_type))
-                          ? std::get<range_scan>(options.scan_type)
-                          : std::get<prefix_scan>(options.scan_type).to_range_scan();
-
-    const auto& from = range.from.value_or(scan_term{ "" });
-    const auto& to = range.to.value_or(scan_term{ "\xf4\x8f\xfb\xfb" });
-
+  if (const auto range = resolve_range(options.scan_type); range.has_value()) {
+    const auto& [from, to] = range.value();
     body["range"] = {
       { from.exclusive ? "excl_start" : "start", base64::encode(from.term) },
       { to.exclusive ? "excl_end" : "end", base64::encode(to.term) },
@@ -266,6 +259,7 @@ public:
 
     req->retry_strategy_ =
       options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
     req->datatype_ = static_cast<std::byte>(protocol::datatype::json);
     req->vbucket_ = vbucket_id;
     req->scope_name_ = options.scope_name;
@@ -347,6 +341,7 @@ public:
 
     req->persistent_ = true;
     req->vbucket_ = vbucket_id;
+    req->parent_span_ = options.parent_span;
 
     if (options.timeout != std::chrono::milliseconds::zero()) {
       auto timer = std::make_shared<asio::steady_timer>(io_);
@@ -392,6 +387,7 @@ public:
 
     req->vbucket_ = vbucket_id;
     req->extras_ = std::move(scan_uuid);
+    req->parent_span_ = options.parent_span;
 
     auto op = collections_.dispatch(req);
     if (!op) {

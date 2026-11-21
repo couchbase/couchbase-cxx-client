@@ -23,8 +23,14 @@
 #include <memory>
 #include <optional>
 #include <system_error>
+#include <utility>
 #include <variant>
 #include <vector>
+
+namespace couchbase::tracing
+{
+class request_span;
+} // namespace couchbase::tracing
 
 namespace couchbase::core
 {
@@ -49,6 +55,12 @@ struct sampling_scan {
   std::optional<std::uint64_t> seed{};
 };
 
+// The bounds a range or prefix scan sends to the server, with unset bounds filled in. Empty for any
+// other scan type.
+[[nodiscard]] auto
+resolve_range(const std::variant<std::monostate, range_scan, prefix_scan, sampling_scan>& scan_type)
+  -> std::optional<std::pair<scan_term, scan_term>>;
+
 struct range_snapshot_requirements {
   std::uint64_t vbucket_uuid{};
   std::uint64_t sequence_number{};
@@ -64,6 +76,7 @@ struct range_scan_create_options {
   std::optional<range_snapshot_requirements> snapshot_requirements{};
   bool ids_only{ false };
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};
@@ -88,6 +101,7 @@ struct range_scan_continue_options {
   std::chrono::milliseconds timeout{};
   std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};
@@ -104,8 +118,9 @@ using range_scan_continue_callback =
   utils::movable_function<void(range_scan_continue_result, std::error_code)>;
 
 struct range_scan_cancel_options {
-  std::chrono::milliseconds timeout;
+  std::chrono::milliseconds timeout{};
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};

@@ -2046,7 +2046,7 @@ to_scan_type(const protocol::sdk::kv::rangescan::Scan& cmd) -> std::unique_ptr<c
 }
 
 couchbase::scan_options
-to_scan_options(const protocol::sdk::kv::rangescan::Scan& cmd)
+to_scan_options(const protocol::sdk::kv::rangescan::Scan& cmd, observability::span_owner* spans)
 {
   couchbase::scan_options opts{};
 
@@ -2082,6 +2082,11 @@ to_scan_options(const protocol::sdk::kv::rangescan::Scan& cmd)
     }
     opts.consistent_with(state);
   }
+#ifdef COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN
+  if (cmd.options().has_parent_span_id()) {
+    opts.parent_span(spans->get_span(cmd.options().parent_span_id()));
+  }
+#endif
 
   return opts;
 }
@@ -2093,7 +2098,7 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
 
   auto collection = args.collection;
   auto scan_type = to_scan_type(cmd);
-  auto options = to_scan_options(cmd);
+  auto options = to_scan_options(cmd, args.spans);
   auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();

@@ -17,15 +17,19 @@
 
 #include "range_scan_options.hxx"
 #include "timeout_defaults.hxx"
+#include "utils/movable_function.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/retry_strategy.hxx>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <system_error>
 #include <vector>
 
 namespace couchbase
@@ -39,6 +43,34 @@ class request_span;
 
 namespace couchbase::core
 {
+namespace tracing
+{
+class tracer_wrapper;
+} // namespace tracing
+
+// Ends the range_scan span once the scan's result is known and no range_scan_partition span is
+// open under it, so that the span outlives all of its children. Delivering the result does not wait
+// for the partitions.
+class range_scan_span_tracker
+{
+public:
+  explicit range_scan_span_tracker(utils::movable_function<void(std::error_code)> end_span);
+
+  // False once the range_scan span has ended; the partition then goes untraced.
+  [[nodiscard]] auto partition_opened() -> bool;
+  void partition_closed();
+  // The first result wins.
+  void finish(std::error_code ec);
+
+private:
+  void end_if_done(std::unique_lock<std::mutex> lock);
+
+  std::mutex mutex_{};
+  std::size_t open_partitions_{ 0 };
+  std::optional<std::error_code> result_{};
+  utils::movable_function<void(std::error_code)> end_span_;
+};
+
 struct mutation_state {
   std::vector<couchbase::mutation_token> tokens;
 };
@@ -55,5 +87,8 @@ struct range_scan_orchestrator_options {
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ make_best_effort_retry_strategy() };
   std::chrono::milliseconds timeout{ timeout_defaults::key_value_scan_timeout };
   std::shared_ptr<couchbase::tracing::request_span> parent_span{};
+  // Creates the spans below parent_span. Without it, the scan creates none.
+  std::shared_ptr<tracing::tracer_wrapper> tracer{};
+  std::shared_ptr<range_scan_span_tracker> span_tracker{};
 };
 } // namespace couchbase::core
