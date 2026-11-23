@@ -418,14 +418,14 @@ a_retry_queued_with_the_deadline_does_not_run_after_the_completion([[maybe_unuse
   // deadline and within the capped margin. One armed earlier runs first, asio gives equal expiries
   // no order, and one left uncapped is still pending when the deadline cancels it. Asserted after
   // run(), since the handler captures locals that must outlive the run.
-  const auto armed_after_deadline = cmd->retry_backoff.expiry() > cmd->deadline.expiry();
+  const auto armed_after_deadline = cmd->retry_backoff.expiry() > cmd->deadline_expiry_;
   const auto capped =
-    cmd->retry_backoff.expiry() - cmd->deadline.expiry() < std::chrono::seconds{ 1 };
+    cmd->retry_backoff.expiry() - cmd->deadline_expiry_ < std::chrono::seconds{ 1 };
 
   // Starting the io context after both expiries makes its first reactor pass queue both
   // completions, the deadline first.
   std::this_thread::sleep_until(
-    std::min(cmd->retry_backoff.expiry(), cmd->deadline.expiry() + std::chrono::seconds{ 1 }) +
+    std::min(cmd->retry_backoff.expiry(), cmd->deadline_expiry_ + std::chrono::seconds{ 1 }) +
     std::chrono::milliseconds{ 50 });
   const auto both_expired = std::chrono::steady_clock::now() > cmd->retry_backoff.expiry();
   fixture.run();
@@ -573,7 +573,7 @@ a_command_waiting_for_a_session_is_canceled_by_close([[maybe_unused]] context& c
 }
 
 void
-a_retry_whose_backoff_ends_after_close_is_canceled([[maybe_unused]] context& ctx)
+a_command_backing_off_when_its_bucket_closes_is_canceled([[maybe_unused]] context& ctx)
 {
   std::vector<std::error_code> completions{};
   bucket_fixture fixture{};
@@ -581,9 +581,27 @@ a_retry_whose_backoff_ends_after_close_is_canceled([[maybe_unused]] context& ctx
   fixture.get()->schedule_for_retry(cmd, std::chrono::milliseconds{ 10 });
 
   fixture.get()->close();
+  assert_eq(completions.size(), std::size_t{ 1 }, "close() answers it before the backoff ends");
   fixture.run();
 
-  assert_eq(completions.size(), std::size_t{ 1 }, "the backoff lap answers the command once");
+  assert_eq(completions.size(), std::size_t{ 1 }, "close() answers the command once");
+  assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
+}
+
+void
+a_command_dispatched_after_close_is_canceled([[maybe_unused]] context& ctx)
+{
+  std::vector<std::error_code> completions{};
+  bucket_fixture fixture{};
+  fixture.get()->close();
+  // Started after close(), so the stopped queue's on_stop() arrives through the io_context, after
+  // map_and_send() has answered the command.
+  auto cmd = started_get(fixture, completions);
+  fixture.get()->map_and_send(cmd);
+  assert_eq(completions.size(), std::size_t{ 1 }, "map_and_send() answers it before on_stop()");
+  fixture.run();
+
+  assert_eq(completions.size(), std::size_t{ 1 }, "map_and_send() answers the command once");
   assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
 }
 
@@ -592,10 +610,13 @@ a_retry_scheduled_after_close_is_canceled([[maybe_unused]] context& ctx)
 {
   std::vector<std::error_code> completions{};
   bucket_fixture fixture{};
-  auto cmd = started_get(fixture, completions);
-
   fixture.get()->close();
+  // Started after close(), so the stopped queue's on_stop() arrives through the io_context, after
+  // the retry. Inside a real close, commands answered by the sessions retry before the queue stops.
+  auto cmd = started_get(fixture, completions);
   fixture.get()->schedule_for_retry(cmd, std::chrono::milliseconds{ 10 });
+  assert_eq(
+    completions.size(), std::size_t{ 1 }, "schedule_for_retry() answers it before on_stop()");
   fixture.run();
 
   assert_eq(completions.size(), std::size_t{ 1 }, "schedule_for_retry() answers the command once");
@@ -685,7 +706,8 @@ tests() -> test_suite
       { CASE(a_completed_command_is_not_scheduled_for_retry), {}, timeout::fast },
       { CASE(a_command_waiting_for_the_configuration_is_canceled_by_close), {}, timeout::fast },
       { CASE(a_command_waiting_for_a_session_is_canceled_by_close), {}, timeout::fast },
-      { CASE(a_retry_whose_backoff_ends_after_close_is_canceled), {}, timeout::fast },
+      { CASE(a_command_backing_off_when_its_bucket_closes_is_canceled), {}, timeout::fast },
+      { CASE(a_command_dispatched_after_close_is_canceled), {}, timeout::fast },
       { CASE(a_retry_scheduled_after_close_is_canceled), {}, timeout::fast },
       { CASE(next_session_index_cycles_sequentially_across_sessions), {}, timeout::fast },
       { CASE(next_session_index_distributes_evenly_across_threads), {}, timeout::fast },

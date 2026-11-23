@@ -301,6 +301,7 @@ set(couchbase_cxx_client_FILES
     core/impl/wildcard_query.cxx
     core/impl/observability_recorder.cxx
     core/impl/transactions.cxx
+    core/io/deadline_queue.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
     core/io/http_parser.cxx

@@ -20,6 +20,7 @@
 #include "core/app_telemetry_meter.hxx"
 #include "core/document_id_redaction.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
+#include "core/io/deadline_queue.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/operation_traits.hxx"
@@ -83,10 +84,11 @@ encode_for_dispatch(Request& request, mcbp_context context, std::chrono::millise
 }
 
 template<typename Manager, typename Request>
-struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
+struct mcbp_command
+  : public std::enable_shared_from_this<mcbp_command<Manager, Request>>
+  , public io::deadline_target {
   using encoded_request_type = typename Request::encoded_request_type;
   using encoded_response_type = typename Request::encoded_response_type;
-  asio::steady_timer deadline;
   asio::steady_timer retry_backoff;
   // Only cancellable operations (replica fan-out) need a strand: their dispatch
   // path can run on the caller thread while a sibling's completion cancels them
@@ -182,8 +184,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                std::shared_ptr<Manager> manager,
                Request req,
                std::chrono::milliseconds default_timeout)
-    : deadline(ctx)
-    , retry_backoff(ctx)
+    : retry_backoff(ctx)
     , strand_(make_command_strand(ctx))
     , request(std::move(req))
     , manager_(std::move(manager))
@@ -231,14 +232,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 #endif
 
     handler_ = std::move(handler);
-    deadline.expires_after(timeout_);
-    deadline_expiry_ = deadline.expiry();
-    deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
-      if (ec == asio::error::operation_aborted) {
-        return;
-      }
-      self->cancel(retry_reason::do_not_retry);
-    });
+    // The queue holds a strong reference until the deadline fires, stop() runs, or complete()
+    // removes it.
+    manager_->deadlines().add(this->shared_from_this(), timeout_, &deadline_expiry_);
 
     if constexpr (is_cancellable_operation_v<Request>) {
       request.cancel_token->setup([weak_self = this->weak_from_this()] {
@@ -247,6 +243,17 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         }
       });
     }
+  }
+
+  void on_deadline() override
+  {
+    cancel(retry_reason::do_not_retry);
+  }
+
+  // The bucket is closing: the request was abandoned, not timed out.
+  void on_stop() override
+  {
+    cancel(retry_reason::do_not_retry, false);
   }
 
   // Whether the one completion was claimed. Safe from any thread.
@@ -925,6 +932,18 @@ private:
                 std::shared_ptr<app_telemetry_value_recorder> telemetry_recorder = nullptr)
   {
     attempt_readable_ = session_readable;
+    // Destroyed last, also when the handler throws: the queue's reference may be the last one to
+    // this command, and a linked entry keeps it alive until its deadline.
+    struct remove_on_exit {
+      io::deadline_queue& queue;
+      io::deadline_target& target;
+
+      ~remove_on_exit()
+      {
+        queue.remove(target);
+      }
+    };
+    const remove_on_exit release{ manager_->deadlines(), *this };
     // Ends the dispatch span no response handler took, before the caller can end its parent.
     // Closing prevents publication; a send() already inside create_dispatch_span() ends that span
     // itself, possibly after the caller has been answered. end() runs before the timeout is
@@ -939,7 +958,6 @@ private:
       abandoned_span->end();
     }
     retry_backoff.cancel();
-    deadline.cancel();
     mcbp_command_handler handler{};
     std::swap(handler, handler_);
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
