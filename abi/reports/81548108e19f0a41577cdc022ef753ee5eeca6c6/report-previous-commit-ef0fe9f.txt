@@ -1,0 +1,20 @@
+libcouchbase_cxx_client.so.1.5 against previous commit ef0fe9f: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 9 added types
+
+9 added types unreachable from any public interface:
+
+  [A] 'struct couchbase::core::utils::movable_function<void()>::vtable' at movable_function.hxx:127:1
+  [A] 'struct std::_Enable_copy_move<true,true,true,true,std::optional<couchbase::core::range_scan>>' at enable_special_members.h:89:1
+  [A] 'struct std::_Enable_copy_move<true,true,true,true,std::variant<couchbase::core::range_scan_item,couchbase::core::scan_stream_end_signal>>' at enable_special_members.h:89:1
+  [A] 'struct std::_Optional_payload_base<couchbase::core::range_scan>::_Empty_byte' at optional:203:1
+  [A] 'struct std::add_pointer<constcouchbase::core::prefix_scan>' at type_traits:2222:1
+  [A] 'struct std::add_pointer<constcouchbase::core::range_scan>' at type_traits:2222:1
+  [A] 'struct std::add_pointer<constcouchbase::core::sampling_scan>' at type_traits:2222:1
+  [A] 'struct std::tuple_element<0,conststd::pair<couchbase::core::scan_term,couchbase::core::scan_term>>' at utility.h:89:1
+  [A] 'struct std::tuple_element<1,conststd::pair<couchbase::core::scan_term,couchbase::core::scan_term>>' at utility.h:89:1
+
