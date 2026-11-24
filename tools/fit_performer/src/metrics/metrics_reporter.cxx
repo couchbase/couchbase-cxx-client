@@ -16,21 +16,23 @@
  */
 
 #include "metrics_reporter.hxx"
+#include "run.top_level.pb.h"
 
 #include <google/protobuf/util/time_util.h>
 #ifdef _WIN32
 #undef GetCurrentTime
 #endif
+#include <spdlog/spdlog.h>
 #include <tao/json.hpp>
 
 #include <asio/post.hpp>
 #include <asio/strand.hpp>
 
-#include <algorithm>
-#include <cmath>
+#include <chrono>
 #include <cstdint>
-#include <cstdlib>
+#include <exception>
 #include <optional>
+#include <utility>
 
 #if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
 #include <malloc.h>
@@ -47,14 +49,6 @@ namespace fit_cxx
 {
 namespace
 {
-constexpr double bytes_per_mb = 1024.0 * 1024.0;
-
-auto
-round2(double value) -> double
-{
-  return std::round(value * 100) / 100;
-}
-
 /// mallinfo2() in-use bytes: uordblks (which includes chunks held in thread caches) plus hblkhd
 /// (mmap-backed chunks). Absent without glibc 2.33.
 auto
@@ -90,20 +84,6 @@ free_swap_bytes() -> std::optional<std::uint64_t>
   return std::nullopt;
 #endif
 }
-
-/// `part` as a percentage of `whole`, clamped to 0..100. `whole` must be positive.
-auto
-clamped_percent(std::int64_t part, std::int64_t whole) -> double
-{
-  return round2(
-    std::clamp(100.0 * static_cast<double>(part) / static_cast<double>(whole), 0.0, 100.0));
-}
-
-auto
-delta(std::uint64_t now, std::uint64_t then) -> std::int64_t
-{
-  return static_cast<std::int64_t>(now) - static_cast<std::int64_t>(then);
-}
 } // namespace
 
 metrics_reporter::metrics_reporter(asio::io_context& ctx,
@@ -121,7 +101,7 @@ metrics_reporter::metrics_reporter(asio::io_context& ctx,
 void
 metrics_reporter::rearm_reporter(std::error_code ec)
 {
-  if (stopped_ || ec == asio::error::operation_aborted) {
+  if (ec == asio::error::operation_aborted || stopped_) {
     return;
   }
 
@@ -131,7 +111,7 @@ metrics_reporter::rearm_reporter(std::error_code ec)
 
   metrics_timer_.expires_after(std::chrono::seconds(1));
   metrics_timer_.async_wait([self = shared_from_this()](std::error_code e) {
-    if (self->stopped_ || e == asio::error::operation_aborted) {
+    if (e == asio::error::operation_aborted || self->stopped_) {
       return;
     }
     self->log_metrics();
@@ -189,46 +169,31 @@ metrics_reporter::collect_and_send()
   if (stopped_) {
     return;
   }
-  const auto initiated = google::protobuf::util::TimeUtil::GetCurrentTime();
-  const auto proc_cpu = sm_reporter_->get_proc_cpu(pid_);
-  const auto system_cpu = sm_reporter_->get_system_cpu();
 
-  if (!initialized_) {
-    last_proc_cpu_ = proc_cpu;
-    last_system_cpu_ = system_cpu;
-    initialized_ = true;
+  const auto initiated = google::protobuf::util::TimeUtil::GetCurrentTime();
+  metrics_sample_input sample{};
+  sample.sampled_at = std::chrono::steady_clock::now();
+  try {
+    sample.logical_cpu_count = sm_reporter_->get_logical_cpu_count();
+  } catch (const std::exception&) {
+    sample.logical_cpu_count = 0;
+  }
+  sample.proc_cpu = sm_reporter_->get_proc_cpu(pid_);
+  sample.system_cpu = sm_reporter_->get_system_cpu();
+  sm_reporter_->iterate_proc_threads(
+    pid_, [&threads = sample.thread_cpu_usec](auto tid, auto utime, auto stime) {
+      threads[tid] = utime + stime;
+    });
+  sample.memory = sm_reporter_->get_proc_memory(pid_);
+  sample.heap_used_bytes = heap_used_bytes();
+  sample.free_swap_bytes = free_swap_bytes();
+
+  const auto report = accumulator_.record(std::move(sample));
+  if (!report.has_value()) {
     return;
   }
 
-  std::uint64_t thread_count = 0;
-  sm_reporter_->iterate_proc_threads(pid_, [&thread_count](auto, auto, auto) {
-    ++thread_count;
-  });
-  const auto memory = sm_reporter_->get_proc_memory(pid_);
-
-  tao::json::value report = {
-    { "memRssUsedMB", round2(static_cast<double>(memory.resident) / bytes_per_mb) },
-    { "memVmsMB", round2(static_cast<double>(memory.size) / bytes_per_mb) },
-    { "threadCount", thread_count },
-  };
-  // Both CPU figures divide by the machine's CPU time over the interval. A counter that did not
-  // advance or went backwards (iowait in /proc/stat may) leaves them out of this sample.
-  if (const auto total = delta(system_cpu.total, last_system_cpu_.total); total > 0) {
-    report["processCpu"] = clamped_percent(
-      delta(proc_cpu.user + proc_cpu.sys, last_proc_cpu_.user + last_proc_cpu_.sys), total);
-    report["systemCpu"] = clamped_percent(delta(system_cpu.busy, last_system_cpu_.busy), total);
-  }
-  if (const auto heap = heap_used_bytes(); heap.has_value()) {
-    report["memHeapUsedMB"] = round2(static_cast<double>(*heap) / bytes_per_mb);
-  }
-  if (const auto swap = free_swap_bytes(); swap.has_value()) {
-    report["freeSwapSizeMB"] = round2(static_cast<double>(*swap) / bytes_per_mb);
-  }
-
-  last_proc_cpu_ = proc_cpu;
-  last_system_cpu_ = system_cpu;
-
-  auto metrics_report = tao::json::to_string(report);
+  auto metrics_report = tao::json::to_string(*report);
   spdlog::info("Metrics (run: {}, pid: {}): {}", run_id_, pid_, metrics_report);
 
   protocol::run::Result result;
