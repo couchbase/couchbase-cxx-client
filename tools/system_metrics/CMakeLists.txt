@@ -7,6 +7,7 @@ add_library(system_metrics_cxx OBJECT
 set_target_properties(system_metrics_cxx PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_project_warnings(system_metrics_cxx)
 set_project_options(system_metrics_cxx)
+enable_sanitizers(system_metrics_cxx)
 
 if(WIN32)
   target_link_libraries(system_metrics_cxx PUBLIC psapi.lib)

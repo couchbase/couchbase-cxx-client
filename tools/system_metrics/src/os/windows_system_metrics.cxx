@@ -99,9 +99,8 @@ windows_system_metrics::get_system_boot_time() const -> std::uint64_t
 auto
 windows_system_metrics::get_logical_cpu_count() const -> std::uint32_t
 {
-  SYSTEM_INFO sys_info{};
-  GetNativeSystemInfo(&sys_info);
-  return sys_info.dwNumberOfProcessors;
+  const DWORD count = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+  return count > 0 ? static_cast<std::uint32_t>(count) : std::numeric_limits<std::uint32_t>::max();
 }
 
 auto
@@ -123,7 +122,11 @@ windows_system_metrics::get_system_cpu() const -> system_cpu_t
   }
   // Kernel time includes idle time.
   const auto total = filetime2msec(kernel_time) + filetime2msec(user_time);
-  return { total - filetime2msec(idle_time), total };
+  const auto idle = filetime2msec(idle_time);
+  system_cpu_t result{};
+  result.busy = total > idle ? total - idle : 0;
+  result.total = total;
+  return result;
 }
 
 auto

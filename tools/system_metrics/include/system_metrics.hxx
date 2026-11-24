@@ -19,6 +19,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
+#include <vector>
 
 #include <sys/types.h>
 
@@ -52,14 +54,30 @@ struct proc_cpu_t {
   std::uint64_t sys{ 0 };
 };
 
+/// CPU time of a single logical CPU since boot, in milliseconds.
+struct core_cpu_t {
+  /// OS logical CPU identifier (e.g. N from Linux /proc/stat cpuN)
+  std::uint32_t core_id{ 0 };
+  /// Time spent on anything other than idle and waiting for I/O
+  std::uint64_t busy{ 0 };
+  /// busy plus idle and I/O wait
+  std::uint64_t total{ 0 };
+};
+
 /// CPU time of the whole system since boot, summed over all logical CPUs, in milliseconds.
 /// Utilisation over an interval is the busy delta divided by the total delta. A backend that cannot
-/// measure the whole machine returns zero for both.
+/// measure the whole machine returns zero for busy and total.
 struct system_cpu_t {
   /// Time spent on anything other than idle and waiting for I/O
   std::uint64_t busy{ 0 };
   /// busy plus idle and I/O wait
   std::uint64_t total{ 0 };
+  /// Time spent waiting for I/O, when exposed by the OS (Linux /proc/stat)
+  std::optional<std::uint64_t> iowait{};
+  /// Time stolen by the hypervisor, when exposed by the OS (Linux /proc/stat)
+  std::optional<std::uint64_t> steal{};
+  /// Per-logical-CPU counters in ascending OS core_id order; empty when unavailable
+  std::vector<core_cpu_t> cores{};
 };
 
 struct proc_mem_t {

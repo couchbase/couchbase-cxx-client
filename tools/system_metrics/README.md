@@ -6,4 +6,4 @@ The goal was to reuse the code in a light-weight manner (we don't need all the l
 
 # TODO
 
-- Add more system-wide metrics?  `get_system_cpu()` reports the whole machine's busy and total CPU time; memory and thread metrics are per-process.
+- Add more system-wide metrics?  `get_system_cpu()` reports the whole machine's busy and total CPU time (plus per-core CPU times on Linux and macOS, and `iowait`/`steal` on Linux); memory and thread metrics are per-process.

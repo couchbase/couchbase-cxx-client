@@ -24,6 +24,7 @@ add_subdirectory(integration/kv)
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
 couchbase_add_test(tools/document_body_generator LABEL unit LINK_CLIENT)
+couchbase_add_test(tools/system_metrics LABEL unit LIBS system_metrics_cxx)
 
 integration_test(connect)
 integration_test(crud)
