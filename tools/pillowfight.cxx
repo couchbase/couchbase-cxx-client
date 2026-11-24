@@ -41,10 +41,13 @@
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 
+#include <atomic>
+#include <condition_variable>
 #include <csignal>
 #include <cstring>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <optional>
 #include <random>
@@ -228,19 +231,23 @@ constexpr const char* default_json_doc = R"({
 using raw_json_transcoder =
   couchbase::codec::json_transcoder<couchbase::codec::binary_noop_serializer>;
 
-std::atomic_flag running{ true };
+// Set to false by the signal handler, which may touch only a lock-free atomic.
+std::atomic<bool> running{ true };
+static_assert(std::atomic<bool>::is_always_lock_free);
 
 std::map<std::error_code, std::uint64_t> errors{};
 std::mutex errors_mutex{};
 
 void
-sigint_handler(int signal)
+sigint_handler(int /* signal */)
 {
-  fmt::print(stderr, "\nrequested stop, signal={}\n", signal);
-  running.clear();
+  running.store(false);
 }
 
 std::atomic_uint64_t total{ 0 };
+// Completions whose error accounting threw: they are in total and the histogram, and may be
+// missing from the error stats.
+std::atomic_uint64_t failed_records{ 0 };
 hdr_histogram* histogram{ nullptr };
 
 void
@@ -328,29 +335,34 @@ upsert_document(const couchbase::collection& collection,
   return collection.upsert<raw_json_transcoder>(document_id, body);
 }
 
-auto
+void
 insert_document(const couchbase::collection& collection,
-                const std::string& document_id,
+                std::string document_id,
                 const std::vector<std::byte>& body,
-                bool binary) -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
+                bool binary,
+                couchbase::insert_handler&& handler)
 {
   if (binary) {
-    return collection.insert<couchbase::codec::raw_binary_transcoder>(document_id, body);
+    collection.insert<couchbase::codec::raw_binary_transcoder>(
+      std::move(document_id), body, {}, std::move(handler));
+    return;
   }
-  return collection.insert<raw_json_transcoder>(document_id, body);
+  collection.insert<raw_json_transcoder>(std::move(document_id), body, {}, std::move(handler));
 }
 
-auto
+void
 replace_document(const couchbase::collection& collection,
-                 const std::string& document_id,
+                 std::string document_id,
                  const std::vector<std::byte>& body,
-                 bool binary)
-  -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
+                 bool binary,
+                 couchbase::replace_handler&& handler)
 {
   if (binary) {
-    return collection.replace<couchbase::codec::raw_binary_transcoder>(document_id, body);
+    collection.replace<couchbase::codec::raw_binary_transcoder>(
+      std::move(document_id), body, {}, std::move(handler));
+    return;
   }
-  return collection.replace<raw_json_transcoder>(document_id, body);
+  collection.replace<raw_json_transcoder>(std::move(document_id), body, {}, std::move(handler));
 }
 
 class pillowfight_app : public CLI::App
@@ -445,6 +457,10 @@ public:
 
     const auto cluster_options = build_cluster_options(common_options_);
 
+    // Declared before io so that it outlives every handler: teardown joins the
+    // workers, closes the cluster, stops the I/O, joins the I/O threads and
+    // destroys io. A handler destroyed without running never dereferences it.
+    std::vector<batch_barrier> barriers(number_of_worker_threads_);
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
 
@@ -505,9 +521,10 @@ public:
     std::vector<std::thread> worker_pool{};
     worker_pool.reserve(number_of_worker_threads_);
     for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-      worker_pool.emplace_back([this, cluster = cluster, &keys = known_keys[i], i]() {
-        worker(cluster, keys, i);
-      });
+      worker_pool.emplace_back(
+        [this, cluster = cluster, &keys = known_keys[i], &barrier = barriers[i], i]() {
+          worker(cluster, keys, barrier, i);
+        });
     }
     for (auto& thread : worker_pool) {
       thread.join();
@@ -544,6 +561,9 @@ public:
           fmt::print("    {}: {}\n", e.message(), count);
         }
       }
+    }
+    if (failed_records > 0) {
+      fmt::print("Failed records (exception while recording a completion): {}\n", failed_records);
     }
 
     for (auto& thread : io_pool) {
@@ -639,8 +659,41 @@ private:
     return std::random_device{}();
   }
 
+  /**
+   * One per worker, reused across its batches. A batch starts only after the
+   * previous one drained, and none starts after a stop abandons one, so no
+   * handler of an earlier batch can touch pending.
+   */
+  struct batch_barrier {
+    std::atomic<std::size_t> pending{ 0 };
+    std::atomic<bool> abandoned{ false };
+    std::mutex mutex{};
+    std::condition_variable completed{};
+  };
+
+  /**
+   * Runs on an I/O thread, or inline in the send, for every operation that a
+   * stop did not abandon. It waits for nothing but errors_mutex and, with
+   * --verbose, stderr.
+   */
+  void on_completion([[maybe_unused]] operation op,
+                     std::chrono::nanoseconds latency,
+                     const couchbase::error& err) const
+  {
+    hdr_record_value_atomic(histogram, latency.count());
+    ++total;
+    if (err.ec()) {
+      const std::scoped_lock lock(errors_mutex);
+      ++errors[err.ec()];
+      if (verbose_) {
+        fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
+      }
+    }
+  }
+
   void worker(couchbase::cluster connected_cluster,
               std::vector<std::string>& known_keys,
+              batch_barrier& barrier,
               std::size_t worker_index) const
   {
     auto cluster = std::move(connected_cluster);
@@ -656,13 +709,32 @@ private:
     bool stopping{ false };
     auto operation_generator{ operation_generator::parse(operation_ratio_string_) };
 
-    while (running.test_and_set() && !stopping) {
-      std::list<
-        std::pair<std::chrono::system_clock::time_point,
-                  std::variant<std::future<std::pair<couchbase::error, couchbase::mutation_result>>,
-                               std::future<std::pair<couchbase::error, couchbase::get_result>>,
-                               std::future<std::pair<couchbase::error, couchbase::query_result>>>>>
-        futures;
+    while (running.load() && !stopping) {
+      barrier.pending.store(operation_batch_size_, std::memory_order_release);
+      auto make_handler = [this, &barrier](operation op) {
+        return [this, barrier = &barrier, op, start = std::chrono::steady_clock::now()](
+                 const couchbase::error& err, const auto& /* result */) {
+          // Operations of an abandoned batch complete with request_canceled at
+          // cluster close and are not recorded.
+          if (!barrier->abandoned.load(std::memory_order_acquire)) {
+            try {
+              on_completion(op, std::chrono::steady_clock::now() - start, err);
+            } catch (...) {
+              // May run on an SDK I/O thread or inline in the send, and must still
+              // drain the batch, so the exception is caught and the dropped record
+              // counted in failed_records.
+              ++failed_records;
+            }
+          }
+          // Recorded before the decrement, so total covers the batch once it
+          // drains. Holding the mutex keeps the notify from landing between the
+          // worker's predicate check and its wait.
+          if (barrier->pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            const std::scoped_lock lock(barrier->mutex);
+            barrier->completed.notify_one();
+          }
+        };
+      };
 
       // Keys inserted by this batch may not be stored yet, so picks draw only from keys known
       // when the batch started.
@@ -674,63 +746,55 @@ private:
                              : std::nullopt;
         std::string document_id = known ? known_keys[*known] : uniq_id("id");
         switch (operation) {
-          case operation::cmd_get:
-            futures.emplace_back(std::chrono::system_clock::now(), collection.get(document_id));
-            break;
-          case operation::cmd_replace:
-            futures.emplace_back(
-              std::chrono::system_clock::now(),
-              replace_document(collection, document_id, body.next(), body.binary()));
-            break;
-          case operation::cmd_delete:
-            futures.emplace_back(std::chrono::system_clock::now(), collection.remove(document_id));
-            break;
-          case operation::cmd_insert:
+          case operation::cmd_get: {
+            auto handler = make_handler(operation);
+            collection.get(std::move(document_id), {}, std::move(handler));
+          } break;
+          case operation::cmd_replace: {
+            const auto& document = body.next();
+            auto handler = make_handler(operation);
+            replace_document(
+              collection, std::move(document_id), document, body.binary(), std::move(handler));
+          } break;
+          case operation::cmd_delete: {
+            auto handler = make_handler(operation);
+            collection.remove(std::move(document_id), {}, std::move(handler));
+          } break;
+          case operation::cmd_insert: {
             known_keys.push_back(document_id);
-            futures.emplace_back(
-              std::chrono::system_clock::now(),
-              insert_document(collection, document_id, body.next(), body.binary()));
-            break;
-          case operation::cmd_query:
-            futures.emplace_back(std::chrono::system_clock::now(),
-                                 cluster.query(query_statement, couchbase::query_options{}));
-            break;
+            const auto& document = body.next();
+            auto handler = make_handler(operation);
+            insert_document(
+              collection, std::move(document_id), document, body.binary(), std::move(handler));
+          } break;
+          case operation::cmd_query: {
+            auto handler = make_handler(operation);
+            cluster.query(query_statement, {}, std::move(handler));
+          } break;
         }
       }
 
-      for (auto&& [start, future] : futures) {
-        std::visit(
-          [&stopping, start = start, verbose = verbose_](auto f) mutable {
-            while (f.wait_for(std::chrono::milliseconds{ 200 }) != std::future_status::ready) {
-              if (!running.test_and_set()) {
-                stopping = true;
-                running.clear();
-                return;
-              }
-            }
-            auto [err, resp] = f.get();
-            hdr_record_value_atomic(histogram, (std::chrono::system_clock::now() - start).count());
-            ++total;
-            if (err.ec()) {
-              const std::scoped_lock lock(errors_mutex);
-              ++errors[err.ec()];
-              if (verbose) {
-                fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
-              }
-            }
-          },
-          std::move(future));
+      {
+        std::unique_lock lock(barrier.mutex);
+        while (!barrier.completed.wait_for(lock, std::chrono::milliseconds{ 200 }, [&barrier] {
+          return barrier.pending.load(std::memory_order_acquire) == 0;
+        })) {
+          if (!running.load()) {
+            stopping = true;
+            barrier.abandoned.store(true, std::memory_order_release);
+            break;
+          }
+        }
       }
 
       if (stopping || (operations_limit_ > 0 && total >= operations_limit_)) {
-        running.clear();
+        running.store(false);
       } else {
         if (batch_wait_ != std::chrono::milliseconds::zero()) {
           std::this_thread::sleep_for(batch_wait_);
         }
       }
     }
-    running.clear();
   }
 
   void populate_keys(const couchbase::cluster& cluster,
