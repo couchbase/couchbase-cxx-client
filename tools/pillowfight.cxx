@@ -18,6 +18,7 @@
 #include "pillowfight.hxx"
 
 #include "document_body_generator.hxx"
+#include "key_picker.hxx"
 
 #include "core/utils/json.hxx"
 #include "utils.hxx"
@@ -45,6 +46,7 @@
 #include <deque>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string_view>
@@ -662,13 +664,15 @@ private:
                                std::future<std::pair<couchbase::error, couchbase::query_result>>>>>
         futures;
 
-      auto known_keys_distribution =
-        std::uniform_int_distribution<std::size_t>(0, known_keys.size() - 1);
+      // Keys inserted by this batch may not be stored yet, so picks draw only from keys known
+      // when the batch started.
+      const auto keys_at_batch_start = known_keys.size();
       for (std::size_t i = 0; i < operation_batch_size_; ++i) {
         auto operation = operation_generator.next_operation();
-        std::string document_id = (operation != operation::cmd_insert && !known_keys.empty())
-                                    ? known_keys[known_keys_distribution(gen)]
-                                    : uniq_id("id");
+        const auto known = operation != operation::cmd_insert
+                             ? pick_known_key(keys_at_batch_start, gen)
+                             : std::nullopt;
+        std::string document_id = known ? known_keys[*known] : uniq_id("id");
         switch (operation) {
           case operation::cmd_get:
             futures.emplace_back(std::chrono::system_clock::now(), collection.get(document_id));

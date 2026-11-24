@@ -21,11 +21,12 @@ add_subdirectory(unit/utils)
 add_subdirectory(integration/kv)
 
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
-# only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
-# and needs no server, so unit is the label, and unit is a label with an aggregate.
+# only a call from this file reaches build_unit_tests. They are pure computation over the tools
+# helpers and need no server, so unit is the label, and unit is a label with an aggregate.
 couchbase_add_test(tools/document_body_generator LABEL unit LINK_CLIENT)
 couchbase_add_test(tools/system_metrics LABEL unit LIBS system_metrics_cxx)
 couchbase_add_test(tools/fit_metrics LABEL unit LIBS system_metrics_cxx taocpp::json)
+couchbase_add_test(tools/key_picker LABEL unit LINK_CLIENT)
 
 integration_test(connect)
 integration_test(crud)
