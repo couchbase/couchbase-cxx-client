@@ -28,6 +28,7 @@
 #include <core/utils/binary.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/binary_noop_serializer.hxx>
+#include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 
 #include <asio/io_context.hpp>
@@ -335,6 +336,19 @@ upsert_document(const couchbase::collection& collection,
   return collection.upsert<raw_json_transcoder>(document_id, body);
 }
 
+/**
+ * The body is already encoded. Handing it over as an encoded_value skips the
+ * JSON transcoder's extra copy of the body, the encode-function allocation and
+ * the request-encoding span.
+ */
+auto
+encode_body(const std::vector<std::byte>& body, bool binary) -> couchbase::codec::encoded_value
+{
+  return { body,
+           binary ? couchbase::codec::codec_flags::binary_common_flags
+                  : couchbase::codec::codec_flags::json_common_flags };
+}
+
 void
 insert_document(const couchbase::collection& collection,
                 std::string document_id,
@@ -342,12 +356,7 @@ insert_document(const couchbase::collection& collection,
                 bool binary,
                 couchbase::insert_handler&& handler)
 {
-  if (binary) {
-    collection.insert<couchbase::codec::raw_binary_transcoder>(
-      std::move(document_id), body, {}, std::move(handler));
-    return;
-  }
-  collection.insert<raw_json_transcoder>(std::move(document_id), body, {}, std::move(handler));
+  collection.insert(std::move(document_id), encode_body(body, binary), {}, std::move(handler));
 }
 
 void
@@ -357,12 +366,7 @@ replace_document(const couchbase::collection& collection,
                  bool binary,
                  couchbase::replace_handler&& handler)
 {
-  if (binary) {
-    collection.replace<couchbase::codec::raw_binary_transcoder>(
-      std::move(document_id), body, {}, std::move(handler));
-    return;
-  }
-  collection.replace<raw_json_transcoder>(std::move(document_id), body, {}, std::move(handler));
+  collection.replace(std::move(document_id), encode_body(body, binary), {}, std::move(handler));
 }
 
 class pillowfight_app : public CLI::App
