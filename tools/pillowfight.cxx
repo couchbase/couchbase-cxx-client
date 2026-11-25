@@ -206,6 +206,19 @@ constexpr std::chrono::milliseconds default_batch_wait{ 0 };
 constexpr std::size_t default_number_of_keys_to_populate{ 1'000 };
 constexpr std::size_t minimum_population_batch_size{ 10 };
 
+/// Substitutes the placeholders that --query-statement documents.
+auto
+format_query_statement(const std::string& statement,
+                       const std::string& bucket_name,
+                       const std::string& scope_name,
+                       const std::string& collection_name) -> std::string
+{
+  return fmt::format(fmt::runtime(statement),
+                     fmt::arg("bucket_name", bucket_name),
+                     fmt::arg("scope_name", scope_name),
+                     fmt::arg("collection_name", collection_name));
+}
+
 constexpr const char* default_json_doc = R"({
   "type": "fake_profile",
   "random": 91,
@@ -1014,7 +1027,8 @@ private:
     auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
     auto body = make_body_generator(worker_index);
-    auto query_statement{ fmt::format(query_statement_, fmt::arg("bucket_name", bucket_name_)) };
+    auto query_statement{ format_query_statement(
+      query_statement_, bucket_name_, scope_name_, collection_name_) };
 
     bool stopping{ false };
     auto operation_generator{ operation_generator::parse(operation_ratio_string_) };
@@ -1130,8 +1144,10 @@ private:
       , collection{ cluster.bucket(app.bucket_name_)
                       .scope(app.scope_name_)
                       .collection(app.collection_name_) }
-      , query_statement{ fmt::format(app.query_statement_,
-                                     fmt::arg("bucket_name", app.bucket_name_)) }
+      , query_statement{ format_query_statement(app.query_statement_,
+                                                app.bucket_name_,
+                                                app.scope_name_,
+                                                app.collection_name_) }
       , io{ io_context }
       , operations{ operation_generator::parse(app.operation_ratio_string_) }
       , body{ app.make_body_generator(worker_index) }
