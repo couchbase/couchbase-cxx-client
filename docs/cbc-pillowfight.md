@@ -25,7 +25,7 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
 <dt>`--pipeline`</dt><dd>Keep `--operation-batch-size` operations in flight per worker thread and send the next one as soon as any completes, instead of waiting for the whole batch. One slow operation, such as a query, then holds one slot rather than the whole batch. When the client is bound by the SDK's I/O thread, every operation in the window waits in its queue, so a smaller window lowers tail latency. With `--document-body-fill=random` and no `--document-body-pool-size`, the next operation is generated on pillowfight's I/O threads rather than the SDK's. Conflicts with `--batch-wait`.</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of I/O threads for pillowfight's own timers and deferred sends, at least 1. The SDK runs its own I/O thread. [default: `1`]</dd>
-<dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the worker threads. [default: `1`]</dd>
+<dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the worker threads, at least 1. [default: `1`]</dd>
 <dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
@@ -33,7 +33,12 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--document-body-format=FORMAT`</dt><dd>Format of a generated document (allowed values: `json`, `binary`). `json` wraps the body in a JSON object and restricts it to a JSON-safe alphabet; `binary` stores the body as opaque bytes of exactly `--document-body-size`. [default: `json`]</dd>
 <dt>`--document-body-pool-size=INTEGER`</dt><dd>Pre-generate this many bytes of document bodies per worker thread and cycle through them, instead of generating a fresh body for every document. Measured in bytes, with a floor of 1 MiB. [default: `0`]</dd>
 <dt>`--document-body-seed=INTEGER`</dt><dd>Seed for `--document-body-fill=random`, so that a dataset can be reproduced. Each worker thread offsets it by its index. Without it the generator is seeded from the system entropy source.</dd>
-<dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
+<dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload this many keys per worker thread before running the workload. Gets, replaces and deletes pick from the keys known to the worker; inserts add new keys. Conflicts with `--number-of-items`. [default: `1000`]</dd>
+<dt>`--number-of-items=INTEGER`</dt><dd>Use a fixed keyset, named as the C pillowfight names its documents. Enables keyset mode, described under KEYSET MODE below. Population retries a failed key under the same name until it is stored or a stop is requested, so a permanent error needs Ctrl-C. Conflicts with `--number-of-keys-to-populate`.</dd>
+<dt>`--key-prefix=STRING`</dt><dd>Prefix for every key of the keyset, at most 230 bytes in the default collection and 226 in any other; empty when not given. Requires `--number-of-items`.</dd>
+<dt>`--start-at=INTEGER`</dt><dd>First index of the keyset. Requires `--number-of-items`. [default: `0`]</dd>
+<dt>`--no-population`</dt><dd>Skip populating the keyset; every key in the range must already exist. Requires `--number-of-items`; conflicts with `--populate-only`.</dd>
+<dt>`--populate-only`</dt><dd>Populate the keyset, then exit. A failed key is retried until it is stored or a stop is requested, so a permanent error needs Ctrl-C. A stop that leaves the keyset incomplete exits with a non-zero status. Requires `--number-of-items`; conflicts with `--no-population`.</dd>
 <dt>`--rate-limit=FLOAT`</dt><dd>Ceiling on total operations per second across all worker threads. Conflicts with `--no-throttle` and `--batch-wait`. See THROTTLING below.</dd>
 <dt>`--no-throttle`</dt><dd>Disable throttling and overload detection. On a busy server cluster the workload then generates more temporary failures and timeouts.</dd>
 <dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely). With `--pipeline`, a send that fails gives its place back and is replaced only while other operations are still completing, so a run whose last sends fail ends below the limit. [default: `0`]</dd>
@@ -94,6 +99,24 @@ in bytes, which a document count does not describe. A pool smaller than that dis
 same body into one block twice and the documents compress again, silently and by a large factor.
 That is why the option refuses a pool below 1 MiB rather than warning about it.
 
+### KEYSET MODE
+
+`--number-of-items` switches the workload to a fixed keyset that can be reused across runs, including a dataset loaded by the C pillowfight (`cbc-pillowfight`).
+
+- Keys are `--key-prefix` followed by the index as 20 zero-padded digits, for every index in `[--start-at, --start-at + --number-of-items)`. This is the C pillowfight's format: `--key-prefix user_ --number-of-items 1000` names `user_00000000000000000000` to `user_00000000000000000999`.
+- `--start-at + --number-of-items` must not exceed 2147483648. The C pillowfight prints larger indices as negative numbers, so they would name different documents.
+- Population splits the range into contiguous slices, one per worker thread, and upserts the slices in turn on the main thread. A failed key is retried under the same name until it is stored or a stop is requested; a permanent error, such as a missing collection, needs Ctrl-C. `--no-population` skips population; `--populate-only` exits after it.
+- Gets and replaces pick a key uniformly from the whole range. Deletes and inserts would add or remove keys, so a non-zero delete or insert weight in `--operation-ratio` is rejected. `--query-statement` runs as given, so a statement that inserts or deletes documents changes the keyset.
+
+A dataset loaded by the C pillowfight may have gaps. Its sequential generator skips keys when `--num-items` is not divisible by `--num-threads`. It can also skip keys when `--start-at` is not zero, even with one thread. A get or replace of a missing key reports `document_not_found`. Loading with `--start-at 0` and a thread count that divides `--num-items` avoids the gaps.
+
+To load a keyset with the C pillowfight and run the C++ workload over it:
+
+```
+cbc-pillowfight -U couchbase://127.0.0.1/default -u Administrator -P password -p user_ -I 100000 -t 1 --populate-only
+cbc pillowfight --key-prefix user_ --number-of-items 100000 --no-population
+```
+
 ### THROTTLING
 
 By default the workload is throttled: a token bucket admits operations, and the rate adapts to signs of overload from the cluster.
@@ -131,7 +154,7 @@ Each cut and each recovery prints one line that stays in the scrollback. Its upt
 
 When stderr is not a terminal, every status line is printed as a new line, without the escape sequences that rewrite the current one. Captured logs stay readable.
 
-The summary at exit adds:
+The summary at exit, `--populate-only` included, adds:
 
 ```
 Per-second rate: min 1, median 21554, max 25737 ops/s
@@ -192,6 +215,47 @@ cbc pillowfight --number-of-worker-threads 4 > pillowfight.log 2>&1
 ```
 
 With output to a file, every status line is a new line. Each cut and each recovery prints its own line, so the log shows when the admitted rate fell and when it came back. The exit summary follows at the end.
+
+**Load a dataset of one million documents once, and reuse it in later runs.**
+
+```
+cbc pillowfight --key-prefix user_ --number-of-items 1000000 --populate-only
+```
+
+A non-zero exit status means a stop left the dataset incomplete. Running the same command again stores every key of the range.
+
+**Run a read-only workload against that dataset without loading it again.**
+
+```
+cbc pillowfight --key-prefix user_ --number-of-items 1000000 --no-population --operation-ratio 1:0:0:0:0
+```
+
+**Split one dataset between two client machines.**
+
+```
+cbc pillowfight --key-prefix user_ --start-at 0 --number-of-items 500000 --no-population
+cbc pillowfight --key-prefix user_ --start-at 500000 --number-of-items 500000 --no-population
+```
+
+Each machine reads and replaces only its own half of the keys.
+
+**Load a large dataset without starving other traffic on the cluster.**
+
+```
+cbc pillowfight --key-prefix user_ --number-of-items 10000000 --populate-only --rate-limit 5000
+```
+
+Population goes through the throttle, so it stores 5000 keys per second on average, with bursts of up to one population batch, and an overload still cuts the rate.
+
+**Concentrate the workload on a small hot set inside a larger dataset.**
+
+```
+cbc pillowfight --key-prefix user_ --start-at 0 --number-of-items 10000 --no-population
+```
+
+Gets and replaces pick only from the first 10000 keys of the dataset.
+
+**Run against a dataset that the C pillowfight loaded.** See the example at the end of KEYSET MODE.
 
 ### LOGGER OPTIONS
 
