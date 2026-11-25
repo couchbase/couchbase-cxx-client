@@ -25,7 +25,7 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
 <dt>`--pipeline`</dt><dd>Keep `--operation-batch-size` operations in flight per worker thread and send the next one as soon as any completes, instead of waiting for the whole batch. One slow operation, such as a query, then holds one slot rather than the whole batch. When the client is bound by the SDK's I/O thread, every operation in the window waits in its queue, so a smaller window lowers tail latency. With `--document-body-fill=random` and no `--document-body-pool-size`, the next operation is generated on pillowfight's I/O threads rather than the SDK's. Conflicts with `--batch-wait`.</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of I/O threads for pillowfight's own timers and deferred sends, at least 1. The SDK runs its own I/O thread. [default: `1`]</dd>
-<dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
+<dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the worker threads. [default: `1`]</dd>
 <dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
@@ -34,6 +34,8 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--document-body-pool-size=INTEGER`</dt><dd>Pre-generate this many bytes of document bodies per worker thread and cycle through them, instead of generating a fresh body for every document. Measured in bytes, with a floor of 1 MiB. [default: `0`]</dd>
 <dt>`--document-body-seed=INTEGER`</dt><dd>Seed for `--document-body-fill=random`, so that a dataset can be reproduced. Each worker thread offsets it by its index. Without it the generator is seeded from the system entropy source.</dd>
 <dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
+<dt>`--rate-limit=FLOAT`</dt><dd>Ceiling on total operations per second across all worker threads. Conflicts with `--no-throttle` and `--batch-wait`. See THROTTLING below.</dd>
+<dt>`--no-throttle`</dt><dd>Disable throttling and overload detection. On a busy server cluster the workload then generates more temporary failures and timeouts.</dd>
 <dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely). With `--pipeline`, a send that fails gives its place back and is replaced only while other operations are still completing, so a run whose last sends fail ends below the limit. [default: `0`]</dd>
 </dl>
 
@@ -91,6 +93,105 @@ not documents, because what has to be defeated is the compressor's look-back dis
 in bytes, which a document count does not describe. A pool smaller than that distance puts the
 same body into one block twice and the documents compress again, silently and by a large factor.
 That is why the option refuses a pool below 1 MiB rather than warning about it.
+
+### THROTTLING
+
+By default the workload is throttled: a token bucket admits operations, and the rate adapts to signs of overload from the cluster.
+
+| Options | Header line | Behaviour |
+|---|---|---|
+| none | `Throttle: adaptive (no ceiling)` | Unlimited until an overload; after a cut the rate grows back, then returns to unlimited. |
+| `--rate-limit=R` | `Throttle: adaptive, ceiling R ops/s` | R operations per second across all worker threads on average, with bursts of up to `max(--operation-batch-size, 10)` operations; after a cut the rate grows back to R. |
+| `--no-throttle` | `Throttle: off` | No bucket and no overload detection. |
+
+Population is throttled as well. With `--rate-limit`, the ceiling applies to population and to the workload. The workload starts from the initial rate, so a cut during population does not carry over.
+
+**Back-off.** Every second the completions since the last judgement are examined, once at least 100 have accumulated. The window counts as overloaded when temporary-failure retries amount to more than 5% of its completions, or when more than 20% of its completions took over 500 ms. One operation retried several times counts every retry. Queries do not count. Over `couchbase2://` no retry is counted, so only slow completions signal overload. An overloaded window halves the admitted rate. An unlimited rate is halved from the highest rate admitted in any second of the judged window, so a stalled second does not lower it. The rate never drops below the floor. The floor is `--operation-batch-size` operations per second, or the ceiling if that is lower. A cut at the floor is not a cut: it prints no line and starts no hold-off. The window after a cut cannot cut again.
+
+**Recovery.** The rate before the first cut of an overload episode is the recovery target. Later cuts in the same episode keep it, and recovery clears it.
+
+- Each healthy window doubles the rate, up to the target.
+- With a ceiling, recovery ends when the rate reaches the ceiling.
+- Without one, recovery ends when the rate reaches the target. It ends earlier once the bucket stops binding: less than 90% of the rate was admitted in the window. The rate then becomes unlimited again.
+- When the highest admitted rate of the judged window is at or below the floor, the target is unknown, and the rate doubles until the bucket stops binding.
+
+**Output.** The status line shows the last second's rate, the average over up to three minutes, and the admitted rate the throttle allows, or `unlimited`. `(backing off)` follows it while a cut is in effect. `--no-throttle` omits the `admitted` field.
+
+```
+uptime: 14s, rate: 19629 ops/s (avg 20474), admitted: unlimited, 0.00 err/s, total: 307112
+uptime: 29s, rate: 1500 ops/s (avg 10723), admitted: 3200 ops/s (backing off), 0.00 err/s, total: 321700
+```
+
+Each cut and each recovery prints one line that stays in the scrollback. Its uptime counts from before the connection to the cluster, so it runs ahead of the status line's by the connection and population time. A cut line gives the retry and slow shares of the judged window, then the admitted rate before and after the cut. A cut from an unlimited rate prints `unlimited -> N`, where N is half the highest rate admitted in the judged window, or the floor when that is higher:
+
+```
+[20s] overload: 0.0% temporary-failure retries, 85.0% slow; admitted rate unlimited -> 100 ops/s
+[34s] recovered: admitted rate unlimited
+```
+
+When stderr is not a terminal, every status line is printed as a new line, without the escape sequences that rewrite the current one. Captured logs stay readable.
+
+The summary at exit adds:
+
+```
+Per-second rate: min 1, median 21554, max 25737 ops/s
+Backing off: 14s, cuts: 1
+Temporary-failure retries: 0
+```
+
+The per-second rate covers every second of the run, population included; a run shorter than one second prints `n/a`. `--no-throttle` prints only the per-second rate.
+
+### EXAMPLES
+
+The connection options are left out of these commands: add `--connection-string`, `--username` and `--password` for a cluster other than the defaults.
+
+**Cap the workload at 20000 operations per second across all worker threads.**
+
+```
+cbc pillowfight --number-of-worker-threads 4 --rate-limit 20000
+```
+
+The rate still drops when the cluster reports overload, and grows back to 20000 afterwards. See THROTTLING.
+
+**Find the most the cluster takes, accepting retries and timeouts.**
+
+```
+cbc pillowfight --number-of-worker-threads 8 --no-throttle
+```
+
+No token bucket admits operations and no overload cuts the rate. The error rate and the latency then show where the cluster saturates, unless the client saturates first. The SDK still retries temporary-failure and locked responses. A busy, out-of-memory or not-initialized response fails at once with a temporary-failure error and is not retried.
+
+**Run one million operations, then exit.**
+
+```
+cbc pillowfight --operations-limit 1000000
+```
+
+In batch mode the limit is checked after each batch, so the run can end up to one batch per worker thread past it. With `--pipeline` the workers never issue more than the limit.
+
+**Keep a slow query from stalling the key-value operations sent with it.**
+
+```
+cbc pillowfight --pipeline --operation-ratio 10:10:0:0:1
+```
+
+In batch mode the next batch starts only after the slowest operation of the current one, the query included. With `--pipeline` the query holds one slot of the window and the other slots keep cycling. The default `--query-statement` needs an index on the bucket.
+
+**Measure a read-heavy workload with 4 KiB documents.**
+
+```
+cbc pillowfight --operation-ratio 9:1:0:0:0 --document-body-size 4096 --document-body-format binary
+```
+
+Nine gets for every replace. `binary` stores exactly 4096 bytes per document; `json` would wrap the body and store more.
+
+**Watch how the workload responds to a rebalance, and keep the record.**
+
+```
+cbc pillowfight --number-of-worker-threads 4 > pillowfight.log 2>&1
+```
+
+With output to a file, every status line is a new line. Each cut and each recovery prints its own line, so the log shows when the admitted rate fell and when it came back. The exit summary follows at the end.
 
 ### LOGGER OPTIONS
 
