@@ -227,6 +227,24 @@ acquire_checks_the_stop_before_the_first_attempt([[maybe_unused]] context& ctx)
                "a stop before the first attempt takes nothing");
   assert_true(bucket.try_take(1, clock_type::now()) == zero, "the token is still in the bucket");
 }
+
+void
+acquire_in_chunks_takes_more_than_the_capacity([[maybe_unused]] context& ctx)
+{
+  const auto running = [] {
+    return false;
+  };
+  const auto stopped = [] {
+    return true;
+  };
+  cbc::token_bucket bucket{ 10, cbc::token_bucket::unlimited, clock_type::now() };
+  assert_true(cbc::acquire_in_chunks(bucket, 25, running),
+              "25 tokens are taken in takes of at most the capacity of 10");
+  assert_eq(bucket.take_granted(), std::uint64_t{ 25 }, "exactly the tokens asked for are taken");
+  assert_false(cbc::acquire_in_chunks(bucket, 25, stopped),
+               "a stop before the first take takes nothing");
+  assert_eq(bucket.take_granted(), std::uint64_t{ 0 }, "a stopped acquire grants nothing");
+}
 } // namespace
 
 auto
@@ -265,6 +283,10 @@ tests() -> test_suite
         timeout::instant },
       { "acquire_checks_the_stop_before_the_first_attempt",
         acquire_checks_the_stop_before_the_first_attempt,
+        {},
+        timeout::instant },
+      { "acquire_in_chunks_takes_more_than_the_capacity",
+        acquire_in_chunks_takes_more_than_the_capacity,
         {},
         timeout::instant },
     },
