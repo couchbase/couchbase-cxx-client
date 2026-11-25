@@ -727,6 +727,10 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TESTS OR COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
   include(cmake/TestFramework.cmake)
 endif()
 
+if(COUCHBASE_CXX_CLIENT_BUILD_TESTS OR COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+  add_subdirectory(tools/system_metrics)
+endif()
+
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
   include(cmake/Testing.cmake)
 endif()

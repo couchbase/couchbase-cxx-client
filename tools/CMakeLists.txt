@@ -114,7 +114,9 @@ if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   set_target_properties(cbc PROPERTIES LINK_FLAGS "/ignore:4099")
 endif()
 
-add_subdirectory(system_metrics)
+if(NOT TARGET system_metrics_cxx)
+  add_subdirectory(system_metrics)
+endif()
 
 target_link_libraries(
   cbc

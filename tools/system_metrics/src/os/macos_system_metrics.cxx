@@ -224,23 +224,95 @@ macos_system_metrics::get_logical_cpu_count() const -> std::uint32_t
 auto
 macos_system_metrics::get_system_cpu() const -> system_cpu_t
 {
+  const auto ticks_per_sec = SystemConstants::instance().ticks;
+  if (ticks_per_sec == 0) {
+    return system_cpu_t{};
+  }
+  const auto ticks_to_msec = [ticks_per_sec](std::uint64_t ticks) -> std::uint64_t {
+    return (ticks / ticks_per_sec) * 1'000ULL +
+           ((ticks % ticks_per_sec) * 1'000ULL) / ticks_per_sec;
+  };
+
+  const mach_port_t self = mach_task_self();
+  const mach_port_t host = mach_host_self();
+  struct host_port_guard {
+    mach_port_t task{};
+    mach_port_t port{};
+    ~host_port_guard()
+    {
+      if (port != MACH_PORT_NULL) {
+        mach_port_deallocate(task, port);
+      }
+    }
+  } const port_guard{ self, host };
+
+  natural_t processor_count = 0;
+  processor_info_array_t cpu_info = nullptr;
+  mach_msg_type_number_t info_count = 0;
+  const kern_return_t kr_cores =
+    host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &processor_count, &cpu_info, &info_count);
+  if (kr_cores == KERN_SUCCESS && cpu_info != nullptr) {
+    struct vm_buffer_guard {
+      mach_port_t task{};
+      processor_info_array_t data{ nullptr };
+      mach_msg_type_number_t count{};
+      ~vm_buffer_guard()
+      {
+        if (data != nullptr && count > 0) {
+          vm_deallocate(task,
+                        reinterpret_cast<vm_address_t>(data),
+                        static_cast<vm_size_t>(count) * sizeof(*data));
+        }
+      }
+    } const buffer_guard{ self, cpu_info, info_count };
+
+    if (processor_count > 0 &&
+        static_cast<std::size_t>(info_count) >=
+          static_cast<std::size_t>(processor_count) * static_cast<std::size_t>(CPU_STATE_MAX)) {
+      system_cpu_t result{};
+      result.cores.reserve(processor_count);
+      std::uint64_t sum_busy_ticks = 0;
+      std::uint64_t sum_total_ticks = 0;
+
+      for (natural_t i = 0; i < processor_count; ++i) {
+        const auto base = static_cast<std::size_t>(i) * static_cast<std::size_t>(CPU_STATE_MAX);
+        const auto user =
+          static_cast<std::uint64_t>(static_cast<natural_t>(cpu_info[base + CPU_STATE_USER]));
+        const auto sys =
+          static_cast<std::uint64_t>(static_cast<natural_t>(cpu_info[base + CPU_STATE_SYSTEM]));
+        const auto nice =
+          static_cast<std::uint64_t>(static_cast<natural_t>(cpu_info[base + CPU_STATE_NICE]));
+        const auto idle =
+          static_cast<std::uint64_t>(static_cast<natural_t>(cpu_info[base + CPU_STATE_IDLE]));
+        const auto core_busy = user + sys + nice;
+        const auto core_total = core_busy + idle;
+        sum_busy_ticks += core_busy;
+        sum_total_ticks += core_total;
+        result.cores.push_back(
+          core_cpu_t{ std::uint32_t{ i }, ticks_to_msec(core_busy), ticks_to_msec(core_total) });
+      }
+
+      result.busy = ticks_to_msec(sum_busy_ticks);
+      result.total = ticks_to_msec(sum_total_ticks);
+      return result;
+    }
+  }
+
   host_cpu_load_info_data_t load{};
   mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
-  const mach_port_t host = mach_host_self();
   const kern_return_t kr =
     host_statistics(host, HOST_CPU_LOAD_INFO, reinterpret_cast<host_info_t>(&load), &count);
-  mach_port_deallocate(mach_task_self(), host);
   if (kr != KERN_SUCCESS) {
     throw std::runtime_error(std::string("get_system_cpu() failed: ") + mach_error_string(kr));
   }
-  // cpu_ticks are summed over all CPUs, in clock ticks.
-  const auto ticks_per_sec = SystemConstants::instance().ticks;
-  const auto msec = [ticks_per_sec](natural_t ticks) {
-    return static_cast<std::uint64_t>(ticks) * 1'000ULL / ticks_per_sec;
-  };
-  const auto busy = msec(load.cpu_ticks[CPU_STATE_USER]) + msec(load.cpu_ticks[CPU_STATE_SYSTEM]) +
-                    msec(load.cpu_ticks[CPU_STATE_NICE]);
-  return { busy, busy + msec(load.cpu_ticks[CPU_STATE_IDLE]) };
+  const auto busy_ticks = static_cast<std::uint64_t>(load.cpu_ticks[CPU_STATE_USER]) +
+                          static_cast<std::uint64_t>(load.cpu_ticks[CPU_STATE_SYSTEM]) +
+                          static_cast<std::uint64_t>(load.cpu_ticks[CPU_STATE_NICE]);
+  const auto total_ticks = busy_ticks + static_cast<std::uint64_t>(load.cpu_ticks[CPU_STATE_IDLE]);
+  system_cpu_t result{};
+  result.busy = ticks_to_msec(busy_ticks);
+  result.total = ticks_to_msec(total_ticks);
+  return result;
 }
 
 auto
