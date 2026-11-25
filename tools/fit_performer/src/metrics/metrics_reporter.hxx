@@ -18,37 +18,24 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
+#include <memory>
 #include <mutex>
+#include <string>
 
 #include <asio/steady_timer.hpp>
-#include <spdlog/spdlog.h>
 
 #include "../batcher.hxx"
-#include "metrics.top_level.pb.h"
-#include "run.top_level.pb.h"
+#include "metrics_accumulator.hxx"
 
-#include <grpcpp/support/sync_stream.h>
-
+#include <system_metrics.hxx>
 #include <system_metrics_reporter.hxx>
 
 namespace fit_cxx
 {
 
-/// Sends a protocol::metrics::Result about once a second while a run is in progress, stamped with
-/// the time it was sampled. Field names follow metrics.top_level.proto where it standardises one.
-///
-///   processCpu     CPU time of this process over the interval, as a percentage of the CPU time
-///                  of the whole machine over the same interval: 0 to 100.
-///   systemCpu      non-idle CPU time of the whole machine over the interval, 0 to 100 percent.
-///   memHeapUsedMB  heap_used_bytes() in metrics_reporter.cxx; absent without glibc 2.33.
-///   memRssUsedMB   resident set size.
-///   memVmsMB       virtual memory size.
-///   threadCount    threads of this process.
-///   freeSwapSizeMB unused swap space of the whole machine; Linux and macOS only.
-///
-/// The CPU fields are deltas, so the first tick sends nothing and records their baseline. A sample
-/// in which the machine's CPU time did not advance leaves them out. Megabytes are 2^20 bytes.
+/// Sends a `protocol::metrics::Result` once a second while a run is active.
+/// The first tick records baseline counters and emits nothing. Field definitions live on
+/// `metrics_accumulator` (`metrics.top_level.proto`).
 class metrics_reporter : public std::enable_shared_from_this<metrics_reporter>
 {
 public:
@@ -69,12 +56,9 @@ private:
   system_metrics::sm_pid_t pid_;
   std::unique_ptr<system_metrics::system_metrics> sm_reporter_;
   std::mutex metrics_mutex_{};
-  bool initialized_{ false };
   std::atomic<bool> stopped_{ false };
   bool warned_{ false };
-  system_metrics::proc_cpu_t last_proc_cpu_{};
-  system_metrics::system_cpu_t last_system_cpu_{};
-  // FIT related 'things'
+  metrics_accumulator accumulator_{};
   std::weak_ptr<fit_cxx::Batcher> batcher_;
   std::string run_id_;
 };

@@ -99,6 +99,7 @@ set(FIT_PERFORMER_SOURCES
     src/fit.cxx
     src/hooks.cxx
     src/hooks.hxx
+    src/metrics/metrics_accumulator.hxx
     src/metrics/metrics_reporter.cxx
     src/metrics/metrics_reporter.hxx
     src/observability/otel.cxx
