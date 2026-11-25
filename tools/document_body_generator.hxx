@@ -125,6 +125,12 @@ public:
     return pool_.size();
   }
 
+  /// Whether next() generates a fresh body on every call rather than reusing a stored one.
+  [[nodiscard]] auto generates_per_document() const -> bool
+  {
+    return pool_.empty();
+  }
+
   [[nodiscard]] auto binary() const -> bool
   {
     return format_ == body_format::binary;

@@ -157,6 +157,21 @@ a_zero_document_size_yields_the_predefined_document([[maybe_unused]] context& ct
     assert_true(body == predefined, "a zero size did not yield the predefined document");
   }
 }
+
+void
+only_an_unpooled_random_fill_generates_per_document([[maybe_unused]] context& ctx)
+{
+  // Pipeline mode posts a replacement off the SDK's I/O thread exactly when this is true.
+  const auto per_document = [](cbc::body_fill fill, std::size_t pool_size) {
+    return cbc::document_body_generator{
+      fill, cbc::body_format::binary, document_size, pool_size, seed
+    }
+      .generates_per_document();
+  };
+  assert_true(per_document(cbc::body_fill::random, 0), "an unpooled random fill");
+  assert_false(per_document(cbc::body_fill::random, document_size * 2), "a pooled random fill");
+  assert_false(per_document(cbc::body_fill::constant, 0), "a constant fill");
+}
 } // namespace
 
 auto
@@ -191,6 +206,10 @@ tests() -> test_suite
         timeout::instant },
       { "a_zero_document_size_yields_the_predefined_document",
         a_zero_document_size_yields_the_predefined_document,
+        {},
+        timeout::instant },
+      { "only_an_unpooled_random_fill_generates_per_document",
+        only_an_unpooled_random_fill_generates_per_document,
         {},
         timeout::instant },
     },

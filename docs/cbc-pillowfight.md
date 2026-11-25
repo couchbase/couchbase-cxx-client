@@ -21,9 +21,10 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--bucket-name=STRING`</dt><dd>Name of the bucket. [default: `default`]</dd>
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>
-<dt>`--operation-batch-size=INTEGER`</dt><dd>Number of the operations in a single batch (set to 1 to wait for completion after every operation). [default: `100`]</dd>
+<dt>`--operation-batch-size=INTEGER`</dt><dd>Number of the operations in a single batch (set to 1 to wait for completion after every operation). With `--pipeline`, the number of operations in flight per worker thread. [default: `100`]</dd>
 <dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
-<dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
+<dt>`--pipeline`</dt><dd>Keep `--operation-batch-size` operations in flight per worker thread and send the next one as soon as any completes, instead of waiting for the whole batch. One slow operation, such as a query, then holds one slot rather than the whole batch. When the client is bound by the SDK's I/O thread, every operation in the window waits in its queue, so a smaller window lowers tail latency. With `--document-body-fill=random` and no `--document-body-pool-size`, the next operation is generated on pillowfight's I/O threads rather than the SDK's. Conflicts with `--batch-wait`.</dd>
+<dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of I/O threads for pillowfight's own timers and deferred sends, at least 1. The SDK runs its own I/O thread. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
@@ -33,7 +34,7 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--document-body-pool-size=INTEGER`</dt><dd>Pre-generate this many bytes of document bodies per worker thread and cycle through them, instead of generating a fresh body for every document. Measured in bytes, with a floor of 1 MiB. [default: `0`]</dd>
 <dt>`--document-body-seed=INTEGER`</dt><dd>Seed for `--document-body-fill=random`, so that a dataset can be reproduced. Each worker thread offsets it by its index. Without it the generator is seeded from the system entropy source.</dd>
 <dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
-<dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely) [default: `0`]</dd>
+<dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely). With `--pipeline`, a send that fails gives its place back and is replaced only while other operations are still completing, so a run whose last sends fail ends below the limit. [default: `0`]</dd>
 </dl>
 
 
