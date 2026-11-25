@@ -32,19 +32,21 @@
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
+#include <atomic>
 #include <csignal>
 
 namespace cbc
 {
 namespace
 {
-std::atomic_flag running{ true };
+// Set to false by the signal handler, which may touch only a lock-free atomic.
+std::atomic<bool> running{ true };
+static_assert(std::atomic<bool>::is_always_lock_free);
 
 void
-sigint_handler(int signal)
+sigint_handler(int /* signal */)
 {
-  fmt::print(stderr, "\nrequested stop, signal={}\n", signal);
-  running.clear();
+  running.store(false);
 }
 
 auto
@@ -190,7 +192,7 @@ public:
 
     bool has_error{ false };
 
-    while (running.test_and_set()) {
+    while (running.load()) {
       for (const auto& id : ids) {
         couchbase::error err;
         if (use_upsert_) {
