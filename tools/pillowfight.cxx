@@ -61,9 +61,17 @@
 #include <optional>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace cbc
 {
@@ -256,6 +264,8 @@ std::atomic_uint64_t total{ 0 };
 // Completions whose error accounting threw: they are in total and the histogram, and may be
 // missing from the error stats.
 std::atomic_uint64_t failed_records{ 0 };
+// Population upserts completed, counted per completion; only the per-second samples read it.
+std::atomic_uint64_t populated{ 0 };
 // Pipeline operations whose generation, deferral or send threw before their handler ran.
 std::atomic_uint64_t failed_sends{ 0 };
 // Pipeline operations reserved against --operations-limit, less those whose send failed.
@@ -291,32 +301,72 @@ struct throttle {
 };
 
 /**
+ * Whether stderr is a terminal. Off a terminal every status line is a full line, and nothing
+ * rewrites the current one.
+ */
+auto
+stderr_is_terminal() -> bool
+{
+#ifdef _WIN32
+  static const bool terminal = _isatty(_fileno(stderr)) != 0;
+#else
+  static const bool terminal = isatty(fileno(stderr)) != 0;
+#endif
+  return terminal;
+}
+
+/// Returns the sequence that rewrites the current terminal line, or nothing off a terminal.
+auto
+clear_line() -> const char*
+{
+  return stderr_is_terminal() ? "\r\033[K" : "";
+}
+
+/// "unlimited", or the rate in ops/s.
+auto
+describe_rate(double rate) -> std::string
+{
+  return std::isinf(rate) ? std::string{ "unlimited" } : fmt::format("{:.0f} ops/s", rate);
+}
+
+/**
  * Shared by the stats tick and execute(). Each tick runs entirely under mutex and re-arms only
- * while stopped is false, so once stop() returns no tick runs or re-arms. execute() arms the timer
- * once, before any wait is pending; after that only the tick arms it. Its destructor runs after io
- * stops, and no other thread cancels it.
+ * while stopped is false, so once stop() returns no tick runs or re-arms, and the run's totals
+ * below can be read without the lock. execute() arms the timer once, before any wait is pending;
+ * after that only the tick arms it. Its destructor runs after io stops, and no other thread
+ * cancels it.
  */
 struct stats_tick {
   std::mutex mutex{};
   bool stopped{ false };
   bool workload_started{ false }; // the status line is printed once set
+  // Event lines count their uptime from here; the status line from start_time.
+  std::chrono::system_clock::time_point created{ std::chrono::system_clock::now() };
   std::chrono::system_clock::time_point start_time{};
+
+  std::vector<std::uint64_t> per_second{}; // operations of every tick, population included
+  std::uint64_t last_operations{ 0 };
+  std::uint64_t temporary_failure_retries{ 0 };
+  std::uint64_t cuts{ 0 };
+  std::uint64_t backing_off_seconds{ 0 };
+  overload_window unjudged{}; // mirrors the controller's accumulation up to its next judgement
 
   /// Population's load says nothing about the workload's, so the workload starts from the
   /// controller's initial rate, and population's completions and grants since the last tick are
-  /// dropped rather than judged with the workload's.
+  /// dropped rather than judged with the workload's. Their retries still count in the total.
   void start_workload(std::chrono::system_clock::time_point now, throttle* control)
   {
     const std::scoped_lock lock(mutex);
     start_time = now;
     workload_started = true;
     if (control != nullptr) {
-      control->detector->take_window();
+      temporary_failure_retries += control->detector->take_window().temporary_failure_retries;
       const auto sampled = token_bucket::clock::now();
       control->bucket.take_granted();
       control->last_grant_sample = sampled;
       control->controller.restart();
       control->bucket.set_rate(control->controller.rate(), sampled);
+      unjudged = {};
     }
   }
 
@@ -325,11 +375,33 @@ struct stats_tick {
     const std::scoped_lock lock(mutex);
     stopped = true;
   }
+
+  /// Call after stop(). Without a throttle only the per-second rate is printed.
+  void print_summary(throttle* control)
+  {
+    if (per_second.empty()) {
+      fmt::print("Per-second rate: n/a\n");
+    } else {
+      auto sorted = per_second;
+      std::sort(sorted.begin(), sorted.end());
+      fmt::print("Per-second rate: min {}, median {}, max {} ops/s\n",
+                 sorted.front(),
+                 sorted[sorted.size() / 2],
+                 sorted.back());
+    }
+    if (control != nullptr) {
+      // The retries since the last tick.
+      temporary_failure_retries += control->detector->take_window().temporary_failure_retries;
+      fmt::print("Backing off: {}s, cuts: {}\n", backing_off_seconds, cuts);
+      fmt::print("Temporary-failure retries: {}\n", temporary_failure_retries);
+    }
+  }
 };
 
 /**
- * Re-arms itself every second until tick.stop(). With a throttle, every tick feeds the window to
- * the controller and applies its rate, from before population onwards.
+ * Re-arms itself every second until tick.stop(). With a throttle, every tick feeds the detector's
+ * window to the controller, applies its rate and prints a line for each cut and recovery, from
+ * before population onwards.
  */
 void
 dump_stats(asio::steady_timer& timer, stats_tick& tick, throttle* control)
@@ -354,20 +426,62 @@ dump_stats(asio::steady_timer& timer, stats_tick& tick, throttle* control)
     if (tick.stopped) {
       return;
     }
+    auto now = std::chrono::system_clock::now();
+    const std::uint64_t operations = total + populated;
+    tick.per_second.push_back(operations - tick.last_operations);
+    tick.last_operations = operations;
+
     if (control != nullptr) {
+      const auto event_uptime =
+        std::chrono::duration_cast<std::chrono::seconds>(now - tick.created);
+      const auto window = control->detector->take_window();
+      // Read from the controller: before the first tick, decision holds no state.
+      const bool was_unlimited = std::isinf(control->controller.rate());
+      tick.temporary_failure_retries += window.temporary_failure_retries;
       // A late tick reads more than one second of grants.
       const auto sampled = token_bucket::clock::now();
       const auto admitted =
         admitted_rate(control->bucket.take_granted(), sampled - control->last_grant_sample);
       control->last_grant_sample = sampled;
-      control->decision = control->controller.on_window(control->detector->take_window(), admitted);
+      control->decision = control->controller.on_window(window, admitted);
       control->bucket.set_rate(control->decision.rate, sampled);
+
+      tick.unjudged.completions += window.completions;
+      tick.unjudged.slow += window.slow;
+      tick.unjudged.temporary_failure_retries += window.temporary_failure_retries;
+      const auto judged = tick.unjudged;
+      if (judged.completions >= aimd_minimum_window_completions) {
+        tick.unjudged = {};
+      }
+      if (control->decision.cut) {
+        ++tick.cuts;
+        const auto completions = static_cast<double>(judged.completions);
+        fmt::print(stderr,
+                   "{}[{}] overload: {:.1f}% temporary-failure retries, {:.1f}% slow; admitted "
+                   "rate {} -> {:.0f} ops/s\n",
+                   clear_line(),
+                   event_uptime,
+                   100.0 * static_cast<double>(judged.temporary_failure_retries) / completions,
+                   100.0 * static_cast<double>(judged.slow) / completions,
+                   was_unlimited ? std::string{ "unlimited" }
+                                 : fmt::format("{:.0f}", control->decision.previous_rate),
+                   control->decision.rate);
+      } else if (control->decision.recovered) {
+        fmt::print(stderr,
+                   "{}[{}] recovered: admitted rate {}\n",
+                   clear_line(),
+                   event_uptime,
+                   describe_rate(control->decision.rate));
+      }
+      if (control->decision.state == throttle_state::backing_off) {
+        ++tick.backing_off_seconds;
+      }
     }
     if (!tick.workload_started) {
+      fflush(stderr);
       return dump_stats(timer, tick, control);
     }
-    auto now = std::chrono::system_clock::now();
-    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - tick.start_time);
+    const auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - tick.start_time);
     const std::uint64_t current_total = total;
     const std::uint64_t current_errors = [] {
       std::scoped_lock lock(errors_mutex);
@@ -402,12 +516,23 @@ dump_stats(asio::steady_timer& timer, stats_tick& tick, throttle* control)
       ops_rate = static_cast<double>(window_ops) / window_size;
       err_rate = static_cast<double>(window_err) / window_size;
     }
+    std::string admitted_field;
+    if (control != nullptr) {
+      admitted_field =
+        fmt::format(", admitted: {}{}",
+                    describe_rate(control->decision.rate),
+                    control->decision.state == throttle_state::backing_off ? " (backing off)" : "");
+    }
     fmt::print(stderr,
-               "\r\033[Kuptime: {}, rate: {:.2f} ops/s, {:.2f} err/s, total: {}",
+               "{}uptime: {}, rate: {} ops/s (avg {:.0f}){}, {:.2f} err/s, total: {}{}",
+               clear_line(),
                uptime,
+               stats_window.back().operations,
                ops_rate,
+               admitted_field,
                err_rate,
-               current_total);
+               current_total,
+               stderr_is_terminal() ? "" : "\n");
 
     fflush(stderr);
     return dump_stats(timer, tick, control);
@@ -614,12 +739,14 @@ public:
                "| Connection String: {}\n"
                "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
                "| Mode: {}\n"
+               "| Throttle: {}\n"
                "| Document body: {} {}, {}\n",
                couchbase::core::meta::sdk_semver(),
                connection_string,
                operation_generator::parse(operation_ratio_string_).to_string(),
                pipeline_ ? fmt::format("pipeline, window {} per worker", operation_batch_size_)
                          : fmt::format("batch, {} per batch", operation_batch_size_),
+               describe_throttle(),
                document_body_fill_,
                document_body_format_,
                describe_document_body_size());
@@ -700,6 +827,7 @@ public:
         diff > 0) {
       fmt::print("Total rate: {} ops/s\n", total / static_cast<std::uint64_t>(diff));
     }
+    tick.print_summary(throttle_ptr);
 
     cluster.close().get();
     guard.reset();
@@ -788,6 +916,17 @@ private:
     }
   }
 
+  [[nodiscard]] auto describe_throttle() const -> std::string
+  {
+    if (no_throttle_) {
+      return "off";
+    }
+    if (has_rate_limit()) {
+      return fmt::format("adaptive, ceiling {} ops/s", rate_limit_);
+    }
+    return "adaptive (no ceiling)";
+  }
+
   [[nodiscard]] auto describe_document_body_size() const -> std::string
   {
     if (document_body_size_ == 0) {
@@ -856,7 +995,7 @@ private:
       const std::scoped_lock lock(errors_mutex);
       ++errors[err.ec()];
       if (verbose_) {
-        fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
+        fmt::print(stderr, "{}{}\n", clear_line(), err.ctx().to_json());
       }
     }
   }
@@ -1295,13 +1434,15 @@ private:
       auto body = make_body_generator(i);
 
       while (keys_left > 0 && still_running()) {
-        fmt::print(stderr,
-                   "\r\033[K{:02.2f}% {} of {}, {}\r",
-                   static_cast<double>(stored_keys) / gsl::narrow_cast<double>(total_keys) * 100,
-                   stored_keys,
-                   total_keys,
-                   std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::system_clock::now() - start_time));
+        if (stderr_is_terminal()) {
+          fmt::print(stderr,
+                     "\r\033[K{:02.2f}% {} of {}, {}\r",
+                     static_cast<double>(stored_keys) / gsl::narrow_cast<double>(total_keys) * 100,
+                     stored_keys,
+                     total_keys,
+                     std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now() - start_time));
+        }
 
         auto batch_size =
           std::min(keys_left, std::max(operation_batch_size_, minimum_population_batch_size));
@@ -1326,6 +1467,7 @@ private:
               if (control != nullptr) {
                 control->detector->record(std::chrono::steady_clock::now() - start);
               }
+              ++populated;
               result->set_value(err);
             });
         }
@@ -1346,7 +1488,8 @@ private:
     const auto total_time = finish_time - start_time;
 
     fmt::print(stderr,
-               "\r\033[K{} keys populated in {}s ({}ms) with {} retries\n",
+               "{}{} keys populated in {}s ({}ms) with {} retries\n",
+               clear_line(),
                stored_keys,
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count(),
