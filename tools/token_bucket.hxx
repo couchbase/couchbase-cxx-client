@@ -114,6 +114,11 @@ public:
     return rate_.load(std::memory_order_relaxed);
   }
 
+  [[nodiscard]] auto capacity() const -> std::size_t
+  {
+    return static_cast<std::size_t>(capacity_);
+  }
+
   /// Tokens granted since the previous call, which makes successive calls a rate meter.
   auto take_granted() -> std::uint64_t
   {
@@ -183,5 +188,21 @@ acquire(token_bucket& bucket, std::size_t n, StopPredicate should_stop) -> bool
   return acquire(bucket, n, std::move(should_stop), [](token_bucket::clock::duration wait) {
     std::this_thread::sleep_for(wait);
   });
+}
+
+/**
+ * acquire() for any `n`: takes at most the bucket's capacity at a time, so `n` may exceed it.
+ * Tokens taken before a stop stay taken. Requires a capacity greater than zero.
+ */
+template<typename StopPredicate>
+auto
+acquire_in_chunks(token_bucket& bucket, std::size_t n, StopPredicate should_stop) -> bool
+{
+  for (std::size_t taken = 0; taken < n; taken += bucket.capacity()) {
+    if (!acquire(bucket, std::min(bucket.capacity(), n - taken), should_stop)) {
+      return false;
+    }
+  }
+  return true;
 }
 } // namespace cbc

@@ -30,6 +30,7 @@ couchbase_add_test(tools/key_picker LABEL unit LINK_CLIENT)
 couchbase_add_test(tools/token_bucket LABEL unit LINK_CLIENT)
 couchbase_add_test(tools/overload_detector LABEL unit LINK_CLIENT)
 couchbase_add_test(tools/aimd_controller LABEL unit LINK_CLIENT)
+couchbase_add_test(tools/throttle_sizing LABEL unit LINK_CLIENT)
 
 integration_test(connect)
 integration_test(crud)

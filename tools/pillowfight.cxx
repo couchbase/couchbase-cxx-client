@@ -17,8 +17,12 @@
 
 #include "pillowfight.hxx"
 
+#include "aimd_controller.hxx"
 #include "document_body_generator.hxx"
 #include "key_picker.hxx"
+#include "overload_detector.hxx"
+#include "throttle_sizing.hxx"
+#include "token_bucket.hxx"
 
 #include "core/utils/json.hxx"
 #include "utils.hxx"
@@ -26,10 +30,9 @@
 #include <core/logger/logger.hxx>
 #include <core/meta/version.hxx>
 #include <core/utils/binary.hxx>
+#include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/cluster.hxx>
-#include <couchbase/codec/binary_noop_serializer.hxx>
 #include <couchbase/codec/codec_flags.hxx>
-#include <couchbase/codec/raw_binary_transcoder.hxx>
 
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
@@ -43,11 +46,14 @@
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <csignal>
 #include <cstring>
 #include <deque>
+#include <future>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -57,6 +63,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 namespace cbc
 {
@@ -189,6 +196,7 @@ constexpr std::size_t default_operations_limit{ 0 };
 constexpr std::size_t default_operation_batch_size{ 100 };
 constexpr std::chrono::milliseconds default_batch_wait{ 0 };
 constexpr std::size_t default_number_of_keys_to_populate{ 1'000 };
+constexpr std::size_t minimum_population_batch_size{ 10 };
 
 constexpr const char* default_json_doc = R"({
   "type": "fake_profile",
@@ -231,9 +239,6 @@ constexpr const char* default_json_doc = R"({
   }
 })";
 
-using raw_json_transcoder =
-  couchbase::codec::json_transcoder<couchbase::codec::binary_noop_serializer>;
-
 // Set to false by the signal handler, which may touch only a lock-free atomic.
 std::atomic<bool> running{ true };
 static_assert(std::atomic<bool>::is_always_lock_free);
@@ -251,7 +256,7 @@ std::atomic_uint64_t total{ 0 };
 // Completions whose error accounting threw: they are in total and the histogram, and may be
 // missing from the error stats.
 std::atomic_uint64_t failed_records{ 0 };
-// Pipeline operations whose generation or send threw before their handler ran.
+// Pipeline operations whose generation, deferral or send threw before their handler ran.
 std::atomic_uint64_t failed_sends{ 0 };
 // Pipeline operations reserved against --operations-limit, less those whose send failed.
 std::atomic_size_t issued_operations{ 0 };
@@ -260,8 +265,74 @@ std::atomic_size_t issued_operations{ 0 };
 thread_local bool in_send_next{ false };
 hdr_histogram* histogram{ nullptr };
 
+/**
+ * Admission control of one run, owned by execute() and absent with --no-throttle. The detector and
+ * the bucket are thread-safe. The controller is used only by the stats tick, and the next tick's
+ * wait is armed only as the handler finishes, so ticks never overlap and the controller needs no
+ * lock. decision is written by the tick under stats_tick::mutex; any other reader takes that mutex.
+ */
+struct throttle {
+  throttle(std::size_t bucket_capacity, std::optional<double> ceiling, double floor)
+    : bucket{ bucket_capacity,
+              ceiling.value_or(token_bucket::unlimited),
+              token_bucket::clock::now() }
+    , controller{ ceiling, floor }
+  {
+  }
+
+  std::shared_ptr<overload_detector> detector{ std::make_shared<overload_detector>(
+    couchbase::make_best_effort_retry_strategy(),
+    default_slow_threshold) };
+  token_bucket bucket;
+  aimd_controller controller;
+  aimd_decision decision{}; // the last tick's; guarded by stats_tick::mutex
+  // When the tick last read the bucket's grants; guarded by stats_tick::mutex.
+  token_bucket::clock::time_point last_grant_sample{ token_bucket::clock::now() };
+};
+
+/**
+ * Shared by the stats tick and execute(). Each tick runs entirely under mutex and re-arms only
+ * while stopped is false, so once stop() returns no tick runs or re-arms. execute() arms the timer
+ * once, before any wait is pending; after that only the tick arms it. Its destructor runs after io
+ * stops, and no other thread cancels it.
+ */
+struct stats_tick {
+  std::mutex mutex{};
+  bool stopped{ false };
+  bool workload_started{ false }; // the status line is printed once set
+  std::chrono::system_clock::time_point start_time{};
+
+  /// Population's load says nothing about the workload's, so the workload starts from the
+  /// controller's initial rate, and population's completions and grants since the last tick are
+  /// dropped rather than judged with the workload's.
+  void start_workload(std::chrono::system_clock::time_point now, throttle* control)
+  {
+    const std::scoped_lock lock(mutex);
+    start_time = now;
+    workload_started = true;
+    if (control != nullptr) {
+      control->detector->take_window();
+      const auto sampled = token_bucket::clock::now();
+      control->bucket.take_granted();
+      control->last_grant_sample = sampled;
+      control->controller.restart();
+      control->bucket.set_rate(control->controller.rate(), sampled);
+    }
+  }
+
+  void stop()
+  {
+    const std::scoped_lock lock(mutex);
+    stopped = true;
+  }
+};
+
+/**
+ * Re-arms itself every second until tick.stop(). With a throttle, every tick feeds the window to
+ * the controller and applies its rate, from before population onwards.
+ */
 void
-dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point start_time)
+dump_stats(asio::steady_timer& timer, stats_tick& tick, throttle* control)
 {
   struct stats_entry {
     std::chrono::system_clock::time_point timestamp;
@@ -275,12 +346,28 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
   static std::uint64_t last_errors{ 0 };
 
   timer.expires_after(std::chrono::seconds{ 1 });
-  timer.async_wait([&timer, start_time](std::error_code ec) {
+  timer.async_wait([&timer, &tick, control](std::error_code ec) {
     if (ec == asio::error::operation_aborted) {
       return;
     }
+    const std::scoped_lock lock(tick.mutex);
+    if (tick.stopped) {
+      return;
+    }
+    if (control != nullptr) {
+      // A late tick reads more than one second of grants.
+      const auto sampled = token_bucket::clock::now();
+      const auto admitted =
+        admitted_rate(control->bucket.take_granted(), sampled - control->last_grant_sample);
+      control->last_grant_sample = sampled;
+      control->decision = control->controller.on_window(control->detector->take_window(), admitted);
+      control->bucket.set_rate(control->decision.rate, sampled);
+    }
+    if (!tick.workload_started) {
+      return dump_stats(timer, tick, control);
+    }
     auto now = std::chrono::system_clock::now();
-    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - start_time);
+    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - tick.start_time);
     const std::uint64_t current_total = total;
     const std::uint64_t current_errors = [] {
       std::scoped_lock lock(errors_mutex);
@@ -323,7 +410,7 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
                current_total);
 
     fflush(stderr);
-    return dump_stats(timer, start_time);
+    return dump_stats(timer, tick, control);
   });
 }
 
@@ -331,18 +418,6 @@ auto
 uniq_id(const std::string& prefix) -> std::string
 {
   return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
-}
-
-auto
-upsert_document(const couchbase::collection& collection,
-                const std::string& document_id,
-                const std::vector<std::byte>& body,
-                bool binary) -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
-{
-  if (binary) {
-    return collection.upsert<couchbase::codec::raw_binary_transcoder>(document_id, body);
-  }
-  return collection.upsert<raw_json_transcoder>(document_id, body);
 }
 
 /**
@@ -463,6 +538,16 @@ public:
              "--document-body-fill=random and no --document-body-pool-size, the next one is "
              "generated on pillowfight's I/O threads rather than the SDK's.")
       ->excludes(batch_wait);
+    auto* no_throttle = add_flag("--no-throttle",
+                                 no_throttle_,
+                                 "Disable throttling and overload detection. On a busy server "
+                                 "cluster the workload then generates more temporary failures "
+                                 "and timeouts.");
+    add_option("--rate-limit",
+               rate_limit_,
+               "Ceiling on total operations per second across all worker threads.")
+      ->excludes(no_throttle)
+      ->excludes(batch_wait);
     add_option("--query-statement",
                query_statement_,
                "The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} "
@@ -483,11 +568,21 @@ public:
   {
     apply_logger_options(common_options_.logger);
 
-    const auto cluster_options = build_cluster_options(common_options_);
+    auto cluster_options = build_cluster_options(common_options_);
 
     // Declared before io so that they outlive every handler: teardown joins the
     // workers, closes the cluster, stops the I/O, joins the I/O threads and
     // destroys io. A handler destroyed without running never dereferences them.
+    std::optional<throttle> control;
+    if (!no_throttle_) {
+      const auto ceiling = has_rate_limit() ? std::optional<double>{ rate_limit_ } : std::nullopt;
+      control.emplace(throttle_capacity(operation_batch_size_, minimum_population_batch_size),
+                      ceiling,
+                      throttle_floor(operation_batch_size_, ceiling));
+      cluster_options.default_retry_strategy(control->detector);
+    }
+    throttle* const throttle_ptr = control ? &*control : nullptr;
+    stats_tick tick;
     std::vector<batch_barrier> barriers(number_of_worker_threads_);
     std::vector<std::vector<std::string>> known_keys(number_of_worker_threads_);
     // Not scoped to the pipeline branch: abandoned handlers run at cluster close.
@@ -540,20 +635,27 @@ public:
         "Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
     }
 
+    // Started before population, so that population is throttled too.
+    asio::steady_timer stats_timer(io);
+    dump_stats(stats_timer, tick, throttle_ptr);
+
     if (number_of_keys_to_populate_ > 0) {
-      populate_keys(cluster, known_keys);
+      populate_keys(cluster, known_keys, throttle_ptr);
     }
 
     const auto start_time = std::chrono::system_clock::now();
+    tick.start_workload(start_time, throttle_ptr);
 
-    asio::steady_timer stats_timer(io);
-    dump_stats(stats_timer, start_time);
-
+    // One per pipeline worker, for operations waiting on a token. Declared after
+    // io, because a timer must be destroyed before its io_context. Not scoped to
+    // the pipeline branch: a timer handler may run until io stops.
+    std::deque<asio::steady_timer> token_timers; // cppcheck-suppress variableScope
     std::vector<std::thread> worker_pool{};
     worker_pool.reserve(number_of_worker_threads_);
     if (pipeline_) {
       for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-        workers.emplace_back(*this, cluster, known_keys[i], i, io);
+        workers.emplace_back(
+          *this, cluster, known_keys[i], i, throttle_ptr, token_timers.emplace_back(io), io);
       }
       for (auto& state : workers) {
         worker_pool.emplace_back([this, &state]() {
@@ -562,10 +664,14 @@ public:
       }
     } else {
       for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-        worker_pool.emplace_back(
-          [this, cluster = cluster, &keys = known_keys[i], &barrier = barriers[i], i]() {
-            worker(cluster, keys, barrier, i);
-          });
+        worker_pool.emplace_back([this,
+                                  cluster = cluster,
+                                  &keys = known_keys[i],
+                                  &barrier = barriers[i],
+                                  i,
+                                  throttle_ptr]() {
+          worker(cluster, keys, barrier, i, throttle_ptr);
+        });
       }
     }
     for (auto& thread : worker_pool) {
@@ -573,7 +679,7 @@ public:
     }
 
     const auto finish_time = std::chrono::system_clock::now();
-    stats_timer.cancel();
+    tick.stop();
 
     fmt::print("\n\nTotal operations: {}\n", total);
     // Pipeline handlers append to known_keys under their worker's mutex until io stops.
@@ -612,7 +718,8 @@ public:
       fmt::print("Failed records (exception while recording a completion): {}\n", failed_records);
     }
     if (failed_sends > 0) {
-      fmt::print("Failed sends (exception while generating or sending): {}\n", failed_sends);
+      fmt::print("Failed sends (exception while generating, deferring or sending): {}\n",
+                 failed_sends);
     }
 
     for (auto& thread : io_pool) {
@@ -628,10 +735,18 @@ public:
   }
 
 private:
+  [[nodiscard]] auto has_rate_limit() const -> bool
+  {
+    return count("--rate-limit") > 0;
+  }
+
   void validate_options() const
   {
     if (operation_batch_size_ == 0) {
       throw CLI::ValidationError("--operation-batch-size cannot be zero");
+    }
+    if (has_rate_limit() && !(rate_limit_ > 0 && std::isfinite(rate_limit_))) {
+      throw CLI::ValidationError("--rate-limit must be a finite number greater than zero");
     }
 
     const auto fill = parse_body_fill(document_body_fill_);
@@ -723,14 +838,20 @@ private:
   /**
    * Runs on an I/O thread, or inline in the send, for every operation that a
    * stop did not abandon. It waits for nothing but errors_mutex and, with
-   * --verbose, stderr.
+   * --verbose, stderr. Queries do not feed the detector: they never retry
+   * with key_value_temporary_failure, and a healthy query can exceed the
+   * slow-completion threshold.
    */
-  void on_completion([[maybe_unused]] operation op,
+  void on_completion(operation op,
                      std::chrono::nanoseconds latency,
-                     const couchbase::error& err) const
+                     const couchbase::error& err,
+                     throttle* control) const
   {
     hdr_record_value_atomic(histogram, latency.count());
     ++total;
+    if (control != nullptr && op != operation::cmd_query) {
+      control->detector->record(latency);
+    }
     if (err.ec()) {
       const std::scoped_lock lock(errors_mutex);
       ++errors[err.ec()];
@@ -743,7 +864,8 @@ private:
   void worker(couchbase::cluster connected_cluster,
               std::vector<std::string>& known_keys,
               batch_barrier& barrier,
-              std::size_t worker_index) const
+              std::size_t worker_index,
+              throttle* control) const
   {
     auto cluster = std::move(connected_cluster);
 
@@ -759,15 +881,18 @@ private:
     auto operation_generator{ operation_generator::parse(operation_ratio_string_) };
 
     while (running.load() && !stopping) {
+      if (control != nullptr && !acquire_tokens(*control, operation_batch_size_)) {
+        break;
+      }
       barrier.pending.store(operation_batch_size_, std::memory_order_release);
-      auto make_handler = [this, &barrier](operation op) {
-        return [this, barrier = &barrier, op, start = std::chrono::steady_clock::now()](
+      auto make_handler = [this, &barrier, control](operation op) {
+        return [this, barrier = &barrier, control, op, start = std::chrono::steady_clock::now()](
                  const couchbase::error& err, const auto& /* result */) {
           // Operations of an abandoned batch complete with request_canceled at
           // cluster close and are not recorded.
           if (!barrier->abandoned.load(std::memory_order_acquire)) {
             try {
-              on_completion(op, std::chrono::steady_clock::now() - start, err);
+              on_completion(op, std::chrono::steady_clock::now() - start, err, control);
             } catch (...) {
               // May run on an SDK I/O thread or inline in the send, and must still
               // drain the batch, so the exception is caught and the dropped record
@@ -825,7 +950,7 @@ private:
 
       {
         std::unique_lock lock(barrier.mutex);
-        while (!barrier.completed.wait_for(lock, std::chrono::milliseconds{ 200 }, [&barrier] {
+        while (!barrier.completed.wait_for(lock, acquire_wait_slice, [&barrier] {
           return barrier.pending.load(std::memory_order_acquire) == 0;
         })) {
           if (!running.load()) {
@@ -857,8 +982,12 @@ private:
                  couchbase::cluster connected_cluster,
                  std::vector<std::string>& keys,
                  std::size_t worker_index,
+                 throttle* throttle_control,
+                 asio::steady_timer& timer,
                  asio::io_context& io_context)
-      : cluster{ std::move(connected_cluster) }
+      : control{ throttle_control }
+      , token_timer{ timer }
+      , cluster{ std::move(connected_cluster) }
       , collection{ cluster.bucket(app.bucket_name_)
                       .scope(app.scope_name_)
                       .collection(app.collection_name_) }
@@ -871,8 +1000,14 @@ private:
     {
     }
 
-    // pending counts the operations in flight.
+    // pending counts the operations in flight or waiting for a token.
     batch_barrier window{};
+    throttle* control;
+
+    // Operations waiting for a token; token_timer is armed while deferred > 0.
+    std::mutex token_mutex{};
+    asio::steady_timer& token_timer;
+    std::size_t deferred{ 0 };
     couchbase::cluster cluster;
     couchbase::collection collection;
     std::string query_statement;
@@ -903,6 +1038,14 @@ private:
     return false;
   }
 
+  /// Takes n tokens, which may exceed the bucket's capacity. False when a stop came first.
+  static auto acquire_tokens(throttle& control, std::size_t n) -> bool
+  {
+    return acquire_in_chunks(control.bucket, n, [] {
+      return !still_running();
+    });
+  }
+
   static void release_slot(worker_state& state)
   {
     // Holding the mutex keeps the notify from landing between the worker's
@@ -914,9 +1057,10 @@ private:
   }
 
   /**
-   * Reserves a slot for one operation and sends it. Runs on the worker thread
-   * for the first window and on SDK threads after that, so it never waits.
-   * It also runs on io, from the inline handler of a posted send.
+   * Reserves a slot for one operation and sends it, or, when the bucket has no
+   * token, leaves it to the worker's token timer. Runs on the worker thread for
+   * the first window and on SDK threads after that, so it never waits.
+   * It also runs on io, from the inline handler of a posted or token-timer send.
    * Called from a handler that the SDK runs inline inside send_next, it posts
    * the send to io instead, so that the stack stays bounded. A replacement
    * whose body is generated per document is posted as well, so that the
@@ -925,6 +1069,21 @@ private:
   void issue_next(worker_state& state, bool replacement) const
   {
     state.window.pending.fetch_add(1, std::memory_order_acq_rel);
+    if (state.control != nullptr) {
+      if (const auto wait = state.control->bucket.try_take(1, token_bucket::clock::now());
+          wait != token_bucket::clock::duration::zero()) {
+        try {
+          const std::scoped_lock lock(state.token_mutex);
+          if (state.deferred == 0) {
+            arm_token_timer(state, wait);
+          }
+          ++state.deferred;
+        } catch (...) {
+          fail_reserved(state, 1);
+        }
+        return;
+      }
+    }
     if (in_send_next || (replacement && state.body.generates_per_document())) {
       post_send(state);
       return;
@@ -956,6 +1115,57 @@ private:
     } catch (...) {
       fail_reserved(state, 1);
     }
+  }
+
+  /// Requires state.token_mutex. A wait of one slice at most picks up a raised rate and a stop.
+  void arm_token_timer(worker_state& state, token_bucket::clock::duration wait) const
+  {
+    state.token_timer.expires_after(
+      std::min<token_bucket::clock::duration>(wait, acquire_wait_slice));
+    state.token_timer.async_wait([this, &state](std::error_code ec) {
+      if (!ec) { // aborted only at teardown, after the window was abandoned
+        on_token_timer(state);
+      }
+    });
+  }
+
+  /**
+   * Runs on pillowfight's io_context. Sends as many deferred operations as the
+   * bucket grants and re-arms for the rest. After a stop, gives their slots
+   * back instead.
+   */
+  void on_token_timer(worker_state& state) const
+  {
+    std::size_t ready{ 0 };
+    std::size_t dropped{ 0 };
+    std::size_t failed{ 0 };
+    {
+      const std::scoped_lock lock(state.token_mutex);
+      if (state.window.abandoned.load(std::memory_order_acquire) || !still_running()) {
+        dropped = std::exchange(state.deferred, 0);
+      } else {
+        while (state.deferred > 0) {
+          const auto wait = state.control->bucket.try_take(1, token_bucket::clock::now());
+          if (wait != token_bucket::clock::duration::zero()) {
+            try {
+              arm_token_timer(state, wait);
+            } catch (...) {
+              failed = std::exchange(state.deferred, 0);
+            }
+            break;
+          }
+          --state.deferred;
+          ++ready;
+        }
+      }
+    }
+    for (; ready > 0; --ready) {
+      send_next(state);
+    }
+    for (; dropped > 0; --dropped) {
+      release_slot(state);
+    }
+    fail_reserved(state, failed);
   }
 
   /**
@@ -1000,7 +1210,7 @@ private:
         // cluster close and are neither recorded nor replaced.
         if (!state->window.abandoned.load(std::memory_order_acquire)) {
           try {
-            on_completion(op, std::chrono::steady_clock::now() - start, err);
+            on_completion(op, std::chrono::steady_clock::now() - start, err, state->control);
           } catch (...) {
             // May run on an SDK I/O thread or inline in the send, and must still
             // settle the slot, so the exception is caught and the dropped record
@@ -1052,7 +1262,7 @@ private:
       issue_next(state, false);
     }
     std::unique_lock lock(state.window.mutex);
-    while (!state.window.completed.wait_for(lock, std::chrono::milliseconds{ 200 }, [&state] {
+    while (!state.window.completed.wait_for(lock, acquire_wait_slice, [&state] {
       return state.window.pending.load(std::memory_order_acquire) == 0;
     })) {
       if (!running.load()) {
@@ -1062,8 +1272,15 @@ private:
     }
   }
 
+  /**
+   * Upserts --number-of-keys-to-populate new keys per worker, or until a stop
+   * is requested, and appends the stored ones to the worker's known_keys. With
+   * a throttle, each batch takes its tokens first, and each upsert feeds the
+   * detector with its own latency, measured from send to callback.
+   */
   void populate_keys(const couchbase::cluster& cluster,
-                     std::vector<std::vector<std::string>>& known_keys) const
+                     std::vector<std::vector<std::string>>& known_keys,
+                     throttle* control) const
   {
     const std::size_t total_keys{ number_of_worker_threads_ * number_of_keys_to_populate_ };
 
@@ -1071,14 +1288,13 @@ private:
 
     const auto start_time = std::chrono::system_clock::now();
 
-    constexpr std::size_t minimum_batch_size{ 10 };
     std::size_t stored_keys{ 0 };
     std::size_t retried_keys{ 0 };
     for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
       auto keys_left = number_of_keys_to_populate_;
       auto body = make_body_generator(i);
 
-      while (keys_left > 0) {
+      while (keys_left > 0 && still_running()) {
         fmt::print(stderr,
                    "\r\033[K{:02.2f}% {} of {}, {}\r",
                    static_cast<double>(stored_keys) / gsl::narrow_cast<double>(total_keys) * 100,
@@ -1087,20 +1303,35 @@ private:
                    std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::system_clock::now() - start_time));
 
-        auto batch_size = std::min(keys_left, std::max(operation_batch_size_, minimum_batch_size));
+        auto batch_size =
+          std::min(keys_left, std::max(operation_batch_size_, minimum_population_batch_size));
+        if (control != nullptr && !acquire_tokens(*control, batch_size)) {
+          break;
+        }
 
-        std::vector<std::pair<std::string,
-                              std::future<std::pair<couchbase::error, couchbase::mutation_result>>>>
-          futures;
+        std::vector<std::pair<std::string, std::future<couchbase::error>>> futures;
         futures.reserve(batch_size);
         for (std::size_t k = 0; k < batch_size; ++k) {
-          const std::string document_id = uniq_id("id");
-          futures.emplace_back(
-            document_id, upsert_document(collection, document_id, body.next(), body.binary()));
+          std::string document_id = uniq_id("id");
+          // Every result is read below, so each handler has run, and finished with
+          // control, before populate_keys returns.
+          auto result = std::make_shared<std::promise<couchbase::error>>();
+          futures.emplace_back(document_id, result->get_future());
+          collection.upsert(
+            std::move(document_id),
+            encode_body(body.next(), body.binary()),
+            {},
+            [result, control, start = std::chrono::steady_clock::now()](
+              const couchbase::error& err, const couchbase::mutation_result& /* result */) {
+              if (control != nullptr) {
+                control->detector->record(std::chrono::steady_clock::now() - start);
+              }
+              result->set_value(err);
+            });
         }
 
         for (auto&& [document_id, future] : futures) {
-          auto [ctx, res] = future.get();
+          const auto ctx = future.get();
           if (ctx.ec()) {
             ++retried_keys;
           } else {
@@ -1129,6 +1360,8 @@ private:
   std::string collection_name_{ couchbase::collection::default_name };
   bool verbose_{ false };
   bool pipeline_{ false };
+  bool no_throttle_{ false };
+  double rate_limit_{ 0 };
   std::size_t operation_batch_size_{};
   std::chrono::milliseconds batch_wait_{};
   std::size_t number_of_io_threads_{};
