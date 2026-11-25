@@ -32,6 +32,7 @@
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 
 #include <asio/io_context.hpp>
+#include <asio/post.hpp>
 #include <asio/steady_timer.hpp>
 #include <gsl/util>
 #include <hdr/hdr_histogram.h>
@@ -47,6 +48,7 @@
 #include <csignal>
 #include <cstring>
 #include <deque>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -249,6 +251,13 @@ std::atomic_uint64_t total{ 0 };
 // Completions whose error accounting threw: they are in total and the histogram, and may be
 // missing from the error stats.
 std::atomic_uint64_t failed_records{ 0 };
+// Pipeline operations whose generation or send threw before their handler ran.
+std::atomic_uint64_t failed_sends{ 0 };
+// Pipeline operations reserved against --operations-limit, less those whose send failed.
+std::atomic_size_t issued_operations{ 0 };
+// Set while this thread is inside send_next. A handler the SDK runs inline from
+// the send then defers its replacement instead of recursing.
+thread_local bool in_send_next{ false };
 hdr_histogram* histogram{ nullptr };
 
 void
@@ -410,8 +419,13 @@ public:
                "Seed for --document-body-fill=random, so that a dataset can be reproduced. Each "
                "worker thread offsets it by its index. Without it the generator is seeded from "
                "the system entropy source.");
-    add_option("--number-of-io-threads", number_of_io_threads_, "Number of the IO threads.")
-      ->default_val(default_number_of_io_threads);
+    // Deferred pipeline sends run on this I/O context, so it needs at least one thread.
+    add_option("--number-of-io-threads",
+               number_of_io_threads_,
+               "Number of I/O threads for pillowfight's own timers and deferred sends. The SDK "
+               "runs its own I/O thread.")
+      ->default_val(default_number_of_io_threads)
+      ->check(CLI::Range(std::size_t{ 1 }, std::numeric_limits<std::size_t>::max()));
     add_option("--number-of-keys-to-populate",
                number_of_keys_to_populate_,
                "Preload keys before running workload, so that the worker will not generate new "
@@ -430,15 +444,25 @@ public:
     add_option("--operations-limit",
                operations_limit_,
                "Stop and exit after the number of the operations reaches this limit. (zero for "
-               "running indefinitely)")
+               "running indefinitely). With --pipeline, a send that fails gives its place back and "
+               "is replaced only while other operations are still completing, so a run whose last "
+               "sends fail ends below the limit.")
       ->default_val(default_operations_limit);
     add_option("--operation-batch-size",
                operation_batch_size_,
                "Number of the operations in single batch operations (1 to wait for completion "
-               "after each operation).")
+               "after each operation). With --pipeline, the number of operations in flight per "
+               "worker thread.")
       ->default_val(default_operation_batch_size);
-    add_option("--batch-wait", batch_wait_, "Time to wait after the batch.")
-      ->default_val(default_batch_wait);
+    auto* batch_wait = add_option("--batch-wait", batch_wait_, "Time to wait after the batch.")
+                         ->default_val(default_batch_wait);
+    add_flag("--pipeline",
+             pipeline_,
+             "Keep --operation-batch-size operations in flight per worker thread and send the next "
+             "one as soon as any completes, instead of waiting for the whole batch. With "
+             "--document-body-fill=random and no --document-body-pool-size, the next one is "
+             "generated on pillowfight's I/O threads rather than the SDK's.")
+      ->excludes(batch_wait);
     add_option("--query-statement",
                query_statement_,
                "The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} "
@@ -461,10 +485,13 @@ public:
 
     const auto cluster_options = build_cluster_options(common_options_);
 
-    // Declared before io so that it outlives every handler: teardown joins the
+    // Declared before io so that they outlive every handler: teardown joins the
     // workers, closes the cluster, stops the I/O, joins the I/O threads and
-    // destroys io. A handler destroyed without running never dereferences it.
+    // destroys io. A handler destroyed without running never dereferences them.
     std::vector<batch_barrier> barriers(number_of_worker_threads_);
+    std::vector<std::vector<std::string>> known_keys(number_of_worker_threads_);
+    // Not scoped to the pipeline branch: abandoned handlers run at cluster close.
+    std::deque<worker_state> workers;
     asio::io_context io;
     auto guard = asio::make_work_guard(io);
 
@@ -491,12 +518,13 @@ public:
                "| Version: {}\n"
                "| Connection String: {}\n"
                "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
-               "| Batch size: {}\n"
+               "| Mode: {}\n"
                "| Document body: {} {}, {}\n",
                couchbase::core::meta::sdk_semver(),
                connection_string,
                operation_generator::parse(operation_ratio_string_).to_string(),
-               operation_batch_size_,
+               pipeline_ ? fmt::format("pipeline, window {} per worker", operation_batch_size_)
+                         : fmt::format("batch, {} per batch", operation_batch_size_),
                document_body_fill_,
                document_body_format_,
                describe_document_body_size());
@@ -512,7 +540,6 @@ public:
         "Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
     }
 
-    std::vector<std::vector<std::string>> known_keys(number_of_worker_threads_);
     if (number_of_keys_to_populate_ > 0) {
       populate_keys(cluster, known_keys);
     }
@@ -524,11 +551,22 @@ public:
 
     std::vector<std::thread> worker_pool{};
     worker_pool.reserve(number_of_worker_threads_);
-    for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-      worker_pool.emplace_back(
-        [this, cluster = cluster, &keys = known_keys[i], &barrier = barriers[i], i]() {
-          worker(cluster, keys, barrier, i);
+    if (pipeline_) {
+      for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
+        workers.emplace_back(*this, cluster, known_keys[i], i, io);
+      }
+      for (auto& state : workers) {
+        worker_pool.emplace_back([this, &state]() {
+          pipeline_worker(state);
         });
+      }
+    } else {
+      for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
+        worker_pool.emplace_back(
+          [this, cluster = cluster, &keys = known_keys[i], &barrier = barriers[i], i]() {
+            worker(cluster, keys, barrier, i);
+          });
+      }
     }
     for (auto& thread : worker_pool) {
       thread.join();
@@ -538,12 +576,16 @@ public:
     stats_timer.cancel();
 
     fmt::print("\n\nTotal operations: {}\n", total);
-    fmt::print(
-      "Total keys used: {}\n",
-      std::accumulate(
-        known_keys.begin(), known_keys.end(), std::size_t{ 0 }, [](auto count, const auto& keys) {
-          return count + keys.size();
-        }));
+    // Pipeline handlers append to known_keys under their worker's mutex until io stops.
+    std::size_t keys_used{ 0 };
+    for (std::size_t i = 0; i < known_keys.size(); ++i) {
+      std::unique_lock<std::mutex> lock{};
+      if (pipeline_) {
+        lock = std::unique_lock{ workers[i].mutex };
+      }
+      keys_used += known_keys[i].size();
+    }
+    fmt::print("Total keys used: {}\n", keys_used);
     const auto total_time = finish_time - start_time;
     fmt::print("Total time: {}s ({}ms)\n",
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
@@ -568,6 +610,9 @@ public:
     }
     if (failed_records > 0) {
       fmt::print("Failed records (exception while recording a completion): {}\n", failed_records);
+    }
+    if (failed_sends > 0) {
+      fmt::print("Failed sends (exception while generating or sending): {}\n", failed_sends);
     }
 
     for (auto& thread : io_pool) {
@@ -801,6 +846,222 @@ private:
     }
   }
 
+  /**
+   * One per pipeline worker, owned by execute() with the same lifetime as a
+   * batch_barrier. Completion handlers of this worker generate the next
+   * operation on SDK threads and on io, so the generator state below mutex is
+   * read and written only while mutex is held, and never during a send.
+   */
+  struct worker_state {
+    worker_state(const pillowfight_app& app,
+                 couchbase::cluster connected_cluster,
+                 std::vector<std::string>& keys,
+                 std::size_t worker_index,
+                 asio::io_context& io_context)
+      : cluster{ std::move(connected_cluster) }
+      , collection{ cluster.bucket(app.bucket_name_)
+                      .scope(app.scope_name_)
+                      .collection(app.collection_name_) }
+      , query_statement{ fmt::format(app.query_statement_,
+                                     fmt::arg("bucket_name", app.bucket_name_)) }
+      , io{ io_context }
+      , operations{ operation_generator::parse(app.operation_ratio_string_) }
+      , body{ app.make_body_generator(worker_index) }
+      , known_keys{ keys }
+    {
+    }
+
+    // pending counts the operations in flight.
+    batch_barrier window{};
+    couchbase::cluster cluster;
+    couchbase::collection collection;
+    std::string query_statement;
+    asio::io_context& io;
+
+    std::mutex mutex{};
+    operation_generator operations;
+    std::mt19937_64 gen{ std::random_device{}() };
+    document_body_generator body;
+    std::vector<std::string>& known_keys;
+  };
+
+  [[nodiscard]] static auto still_running() -> bool
+  {
+    return running.load();
+  }
+
+  /// Reserves one operation against --operations-limit. False once the limit is reached. A failed
+  /// send gives its reservation back, and only a later completion can reserve it again, so a run
+  /// whose last sends fail ends below the limit.
+  [[nodiscard]] auto reserve_operation() const -> bool
+  {
+    if (const auto reserved = issued_operations.fetch_add(1, std::memory_order_relaxed);
+        operations_limit_ == 0 || reserved < operations_limit_) {
+      return true;
+    }
+    issued_operations.fetch_sub(1, std::memory_order_relaxed);
+    return false;
+  }
+
+  static void release_slot(worker_state& state)
+  {
+    // Holding the mutex keeps the notify from landing between the worker's
+    // predicate check and its wait.
+    if (state.window.pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      const std::scoped_lock lock(state.window.mutex);
+      state.window.completed.notify_one();
+    }
+  }
+
+  /**
+   * Reserves a slot for one operation and sends it. Runs on the worker thread
+   * for the first window and on SDK threads after that, so it never waits.
+   * It also runs on io, from the inline handler of a posted send.
+   * Called from a handler that the SDK runs inline inside send_next, it posts
+   * the send to io instead, so that the stack stays bounded. A replacement
+   * whose body is generated per document is posted as well, so that the
+   * generation does not run on the SDK's I/O thread.
+   */
+  void issue_next(worker_state& state, bool replacement) const
+  {
+    state.window.pending.fetch_add(1, std::memory_order_acq_rel);
+    if (in_send_next || (replacement && state.body.generates_per_document())) {
+      post_send(state);
+      return;
+    }
+    send_next(state);
+  }
+
+  /// Gives back n reserved slots whose operations were never sent, counting them in failed_sends.
+  static void fail_reserved(worker_state& state, std::size_t n)
+  {
+    failed_sends += n;
+    issued_operations.fetch_sub(n, std::memory_order_relaxed);
+    for (; n > 0; --n) {
+      release_slot(state);
+    }
+  }
+
+  /// Sends into a reserved slot from io. After a stop, gives the slot back instead.
+  void post_send(worker_state& state) const
+  {
+    try {
+      asio::post(state.io, [this, &state] {
+        if (state.window.abandoned.load(std::memory_order_acquire) || !still_running()) {
+          release_slot(state);
+          return;
+        }
+        send_next(state);
+      });
+    } catch (...) {
+      fail_reserved(state, 1);
+    }
+  }
+
+  /**
+   * Generates one operation under state.mutex and sends it outside the lock,
+   * into a slot issue_next reserved. An exception while generating or sending
+   * gives the slot back and counts in failed_sends, unless the handler ran
+   * first: settled lets exactly one of the two settle the operation.
+   */
+  void send_next(worker_state& state) const
+  {
+    in_send_next = true;
+    const auto leave = gsl::finally([] {
+      in_send_next = false;
+    });
+    std::shared_ptr<std::atomic<bool>> settled;
+    try {
+      settled = std::make_shared<std::atomic<bool>>(false);
+      operation op{};
+      std::string document_id;
+      std::optional<couchbase::codec::encoded_value> value;
+      {
+        const std::scoped_lock lock(state.mutex);
+        op = state.operations.next_operation();
+        auto& keys = state.known_keys;
+        const auto known =
+          op != operation::cmd_insert ? pick_known_key(keys.size(), state.gen) : std::nullopt;
+        document_id = known ? keys[*known] : uniq_id("id");
+        if (op == operation::cmd_insert) {
+          keys.push_back(document_id);
+        }
+        if (op == operation::cmd_insert || op == operation::cmd_replace) {
+          value = encode_body(state.body.next(), state.body.binary());
+        }
+      }
+
+      auto handler = [this, state = &state, settled, op, start = std::chrono::steady_clock::now()](
+                       const couchbase::error& err, const auto& /* result */) {
+        if (settled->exchange(true, std::memory_order_acq_rel)) {
+          return;
+        }
+        // Operations abandoned by a stop complete with request_canceled at
+        // cluster close and are neither recorded nor replaced.
+        if (!state->window.abandoned.load(std::memory_order_acquire)) {
+          try {
+            on_completion(op, std::chrono::steady_clock::now() - start, err);
+          } catch (...) {
+            // May run on an SDK I/O thread or inline in the send, and must still
+            // settle the slot, so the exception is caught and the dropped record
+            // counted in failed_records.
+            ++failed_records;
+          }
+          if (still_running() && reserve_operation()) {
+            issue_next(*state, true);
+          }
+        }
+        // After the replacement is in flight, so the window drains only when
+        // nothing replaces this operation.
+        release_slot(*state);
+      };
+      switch (op) {
+        case operation::cmd_get:
+          state.collection.get(std::move(document_id), {}, std::move(handler));
+          break;
+        case operation::cmd_replace:
+          state.collection.replace(
+            std::move(document_id), std::move(*value), {}, std::move(handler));
+          break;
+        case operation::cmd_delete:
+          state.collection.remove(std::move(document_id), {}, std::move(handler));
+          break;
+        case operation::cmd_insert:
+          state.collection.insert(
+            std::move(document_id), std::move(*value), {}, std::move(handler));
+          break;
+        case operation::cmd_query:
+          state.cluster.query(state.query_statement, {}, std::move(handler));
+          break;
+      }
+    } catch (...) {
+      if (!settled || !settled->exchange(true, std::memory_order_acq_rel)) {
+        fail_reserved(state, 1);
+      }
+    }
+  }
+
+  /**
+   * Starts the window, then waits until it drains (--operations-limit
+   * reached, or every send failed) or a stop abandons it.
+   */
+  void pipeline_worker(worker_state& state) const
+  {
+    for (std::size_t i = 0; i < operation_batch_size_ && still_running() && reserve_operation();
+         ++i) {
+      issue_next(state, false);
+    }
+    std::unique_lock lock(state.window.mutex);
+    while (!state.window.completed.wait_for(lock, std::chrono::milliseconds{ 200 }, [&state] {
+      return state.window.pending.load(std::memory_order_acquire) == 0;
+    })) {
+      if (!running.load()) {
+        state.window.abandoned.store(true, std::memory_order_release);
+        break;
+      }
+    }
+  }
+
   void populate_keys(const couchbase::cluster& cluster,
                      std::vector<std::vector<std::string>>& known_keys) const
   {
@@ -867,6 +1128,7 @@ private:
   std::string scope_name_{ couchbase::scope::default_name };
   std::string collection_name_{ couchbase::collection::default_name };
   bool verbose_{ false };
+  bool pipeline_{ false };
   std::size_t operation_batch_size_{};
   std::chrono::milliseconds batch_wait_{};
   std::size_t number_of_io_threads_{};
