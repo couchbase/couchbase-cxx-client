@@ -20,6 +20,8 @@
 #include "aimd_controller.hxx"
 #include "document_body_generator.hxx"
 #include "key_picker.hxx"
+#include "key_range.hxx"
+#include "operation_weights.hxx"
 #include "overload_detector.hxx"
 #include "throttle_sizing.hxx"
 #include "token_bucket.hxx"
@@ -64,6 +66,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -85,51 +88,12 @@ enum class operation : std::uint8_t {
   cmd_query,
 };
 
-struct operation_weights {
-  std::size_t gets{ 1 };
-  std::size_t replaces{ 1 };
-  std::size_t deletes{ 0 };
-  std::size_t inserts{ 0 };
-  std::size_t queries{ 0 };
-
-  [[nodiscard]] auto to_string() const -> std::string
-  {
-    return fmt::format("{}:{}:{}:{}:{}", gets, replaces, deletes, inserts, queries);
-  }
-
-  [[nodiscard]] auto to_vector() const -> std::vector<std::size_t>
-  {
-    return { gets, replaces, deletes, inserts, queries };
-  }
-};
-
 class operation_generator
 {
 public:
   static auto parse(const std::string& input) -> operation_generator
   {
-    operation_weights weights;
-
-    std::stringstream is(input);
-    std::string token;
-
-    if (std::getline(is, token, ':')) {
-      weights.gets = parse_ratio_term(token, weights.gets);
-    }
-    if (std::getline(is, token, ':')) {
-      weights.replaces = parse_ratio_term(token, weights.replaces);
-    }
-    if (std::getline(is, token, ':')) {
-      weights.deletes = parse_ratio_term(token, weights.inserts);
-    }
-    if (std::getline(is, token, ':')) {
-      weights.inserts = parse_ratio_term(token, weights.inserts);
-    }
-    if (std::getline(is, token, ':')) {
-      weights.queries = parse_ratio_term(token, weights.queries);
-    }
-
-    return operation_generator(weights);
+    return operation_generator(parse_operation_weights(input));
   }
 
   [[nodiscard]] auto next_operation() -> operation
@@ -148,18 +112,6 @@ private:
     , weights_vector_{ weights_.to_vector() }
     , distribution_{ weights_vector_.begin(), weights_vector_.end() }
   {
-  }
-
-  static auto parse_ratio_term(const std::string& term, std::size_t default_value) -> std::size_t
-  {
-    try {
-      return std::stoull(term);
-    } catch (const std::invalid_argument&) {
-      /* fall through */
-    } catch (const std::out_of_range&) {
-      /* fall through */
-    }
-    return default_value;
   }
 
   std::random_device random_device_;
@@ -639,14 +591,47 @@ public:
                "runs its own I/O thread.")
       ->default_val(default_number_of_io_threads)
       ->check(CLI::Range(std::size_t{ 1 }, std::numeric_limits<std::size_t>::max()));
-    add_option("--number-of-keys-to-populate",
-               number_of_keys_to_populate_,
-               "Preload keys before running workload, so that the worker will not generate new "
-               "keys afterwards.")
-      ->default_val(default_number_of_keys_to_populate);
+    auto* number_of_keys_to_populate =
+      add_option("--number-of-keys-to-populate",
+                 number_of_keys_to_populate_,
+                 "Preload this many keys per worker thread before running the workload. Gets, "
+                 "replaces and deletes pick from the keys known to the worker; inserts add new "
+                 "keys.")
+        ->default_val(default_number_of_keys_to_populate);
+    auto* number_of_items =
+      add_option("--number-of-items",
+                 number_of_items_,
+                 "Use the fixed keyset --key-prefix + 20-digit index, for every index in "
+                 "[--start-at, --start-at + --number-of-items), named as the C pillowfight names "
+                 "its documents. Gets and replaces pick a key uniformly from the whole range; "
+                 "deletes and inserts are rejected, so the dataset can be reused across runs. "
+                 "Population retries a failed key under the same name until it is stored or a stop "
+                 "is requested, so a permanent error needs Ctrl-C.")
+        ->excludes(number_of_keys_to_populate);
+    add_option("--key-prefix",
+               key_prefix_,
+               "Prefix for every key of the keyset, at most 230 bytes in the default collection "
+               "and 226 in any other.")
+      ->needs(number_of_items);
+    add_option("--start-at", start_at_, "First index of the keyset.")
+      ->default_val(0)
+      ->needs(number_of_items);
+    auto* no_population =
+      add_flag("--no-population",
+               no_population_,
+               "Skip populating the keyset. Every key in the range must already exist.")
+        ->needs(number_of_items);
+    add_flag("--populate-only",
+             populate_only_,
+             "Populate the keyset, then exit. A failed key is retried until it is stored or a stop "
+             "is requested, so a permanent error needs Ctrl-C. A stop that leaves the keyset "
+             "incomplete exits with a non-zero status.")
+      ->needs(number_of_items)
+      ->excludes(no_population);
     add_option(
       "--number-of-worker-threads", number_of_worker_threads_, "Number of the worker threads.")
-      ->default_val(default_number_of_worker_threads);
+      ->default_val(default_number_of_worker_threads)
+      ->check(CLI::Range(std::size_t{ 1 }, std::numeric_limits<std::size_t>::max()));
     add_option(
       "--operation-ratio",
       operation_ratio_string_,
@@ -693,12 +678,17 @@ public:
       ->default_val(default_query_statement);
     add_option("--scope-name", scope_name_, "Name of the scope.")
       ->default_val(couchbase::scope::default_name);
+    add_option("--collection-name", collection_name_, "Name of the collection.")
+      ->default_val(couchbase::collection::default_name);
 
     add_common_options(this, common_options_);
     allow_extras(true);
 
     parse_complete_callback([this]() {
       validate_options();
+      if (count("--number-of-items") > 0) {
+        keyset_.emplace(key_prefix_, start_at_, number_of_items_);
+      }
     });
   }
 
@@ -753,7 +743,8 @@ public:
                "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
                "| Mode: {}\n"
                "| Throttle: {}\n"
-               "| Document body: {} {}, {}\n",
+               "| Document body: {} {}, {}\n"
+               "{}",
                couchbase::core::meta::sdk_semver(),
                connection_string,
                operation_generator::parse(operation_ratio_string_).to_string(),
@@ -762,7 +753,8 @@ public:
                describe_throttle(),
                document_body_fill_,
                document_body_format_,
-               describe_document_body_size());
+               describe_document_body_size(),
+               describe_keyset());
 
     auto [connect_err, cluster] =
       couchbase::cluster::connect(connection_string, cluster_options).get();
@@ -779,8 +771,22 @@ public:
     asio::steady_timer stats_timer(io);
     dump_stats(stats_timer, tick, throttle_ptr);
 
-    if (number_of_keys_to_populate_ > 0) {
-      populate_keys(cluster, known_keys, throttle_ptr);
+    bool population_complete{ true };
+    if (keyset_ ? !no_population_ : number_of_keys_to_populate_ > 0) {
+      population_complete = populate_keys(cluster, known_keys, throttle_ptr);
+    }
+    // A stop during population skips the workload: no worker or body pool is built.
+    if (populate_only_ || !still_running()) {
+      tick.stop();
+      tick.print_summary(throttle_ptr);
+      cluster.close().get();
+      guard.reset();
+      io.stop();
+      for (auto& thread : io_pool) {
+        thread.join();
+      }
+      // Non-zero tells a script that a stop left the keyset incomplete.
+      return populate_only_ && !population_complete ? 1 : 0;
     }
 
     const auto start_time = std::chrono::system_clock::now();
@@ -822,16 +828,20 @@ public:
     tick.stop();
 
     fmt::print("\n\nTotal operations: {}\n", total);
-    // Pipeline handlers append to known_keys under their worker's mutex until io stops.
-    std::size_t keys_used{ 0 };
-    for (std::size_t i = 0; i < known_keys.size(); ++i) {
-      std::unique_lock<std::mutex> lock{};
-      if (pipeline_) {
-        lock = std::unique_lock{ workers[i].mutex };
+    if (keyset_) {
+      fmt::print("Keyset size: {}\n", keyset_->count());
+    } else {
+      // Pipeline handlers append to known_keys under their worker's mutex until io stops.
+      std::size_t keys_used{ 0 };
+      for (std::size_t i = 0; i < known_keys.size(); ++i) {
+        std::unique_lock<std::mutex> lock{};
+        if (pipeline_) {
+          lock = std::unique_lock{ workers[i].mutex };
+        }
+        keys_used += known_keys[i].size();
       }
-      keys_used += known_keys[i].size();
+      fmt::print("Total keys used: {}\n", keys_used);
     }
-    fmt::print("Total keys used: {}\n", keys_used);
     const auto total_time = finish_time - start_time;
     fmt::print("Total time: {}s ({}ms)\n",
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
@@ -889,6 +899,9 @@ private:
     if (has_rate_limit() && !(rate_limit_ > 0 && std::isfinite(rate_limit_))) {
       throw CLI::ValidationError("--rate-limit must be a finite number greater than zero");
     }
+    if (count("--number-of-items") > 0) {
+      validate_keyset_options();
+    }
 
     const auto fill = parse_body_fill(document_body_fill_);
 
@@ -929,6 +942,22 @@ private:
     }
   }
 
+  void validate_keyset_options() const
+  {
+    if (const auto error =
+          key_range::validate(key_prefix_,
+                              start_at_,
+                              number_of_items_,
+                              key_range::is_default_collection(scope_name_, collection_name_))) {
+      throw CLI::ValidationError(*error);
+    }
+    if (!keeps_every_key(parse_operation_weights(operation_ratio_string_))) {
+      throw CLI::ValidationError(
+        "--operation-ratio deletes and inserts must be 0 with --number-of-items: keyset mode "
+        "keeps every key in the range so the dataset can be reused");
+    }
+  }
+
   [[nodiscard]] auto describe_throttle() const -> std::string
   {
     if (no_throttle_) {
@@ -938,6 +967,41 @@ private:
       return fmt::format("adaptive, ceiling {} ops/s", rate_limit_);
     }
     return "adaptive (no ceiling)";
+  }
+
+  [[nodiscard]] auto describe_keyset() const -> std::string
+  {
+    if (!keyset_) {
+      return {};
+    }
+    return fmt::format("| Keyset: \"{}\" [{}, {}), population: {}\n"
+                       "| Inserts/deletes: disabled in keyset mode\n",
+                       keyset_->prefix(),
+                       keyset_->start(),
+                       std::uint64_t{ keyset_->start() } + keyset_->count(),
+                       no_population_ ? "off" : "on");
+  }
+
+  /**
+   * The key for the next operation. In keyset mode it is uniform over the
+   * whole range. Otherwise it is one of known_keys, or a new key for an insert
+   * or when none is known. known_keys and gen belong to the calling worker.
+   */
+  // In default mode a key is drawn from the first known_count entries of known_keys.
+  [[nodiscard]] auto pick_key(operation op,
+                              const std::vector<std::string>& known_keys,
+                              std::size_t known_count,
+                              std::mt19937_64& gen) const -> std::string
+  {
+    if (keyset_) {
+      return keyset_->pick(gen);
+    }
+    if (op != operation::cmd_insert) {
+      if (const auto known = pick_known_key(known_count, gen)) {
+        return known_keys[*known];
+      }
+    }
+    return uniq_id("id");
   }
 
   [[nodiscard]] auto describe_document_body_size() const -> std::string
@@ -1068,10 +1132,10 @@ private:
       const auto keys_at_batch_start = known_keys.size();
       for (std::size_t i = 0; i < operation_batch_size_; ++i) {
         auto operation = operation_generator.next_operation();
-        const auto known = operation != operation::cmd_insert
-                             ? pick_known_key(keys_at_batch_start, gen)
-                             : std::nullopt;
-        std::string document_id = known ? known_keys[*known] : uniq_id("id");
+        std::string document_id;
+        if (operation != operation::cmd_query) {
+          document_id = pick_key(operation, known_keys, keys_at_batch_start, gen);
+        }
         switch (operation) {
           case operation::cmd_get: {
             auto handler = make_handler(operation);
@@ -1344,12 +1408,11 @@ private:
       {
         const std::scoped_lock lock(state.mutex);
         op = state.operations.next_operation();
-        auto& keys = state.known_keys;
-        const auto known =
-          op != operation::cmd_insert ? pick_known_key(keys.size(), state.gen) : std::nullopt;
-        document_id = known ? keys[*known] : uniq_id("id");
+        if (op != operation::cmd_query) {
+          document_id = pick_key(op, state.known_keys, state.known_keys.size(), state.gen);
+        }
         if (op == operation::cmd_insert) {
-          keys.push_back(document_id);
+          state.known_keys.push_back(document_id);
         }
         if (op == operation::cmd_insert || op == operation::cmd_replace) {
           value = encode_body(state.body.next(), state.body.binary());
@@ -1428,16 +1491,24 @@ private:
   }
 
   /**
-   * Upserts --number-of-keys-to-populate new keys per worker, or until a stop
-   * is requested, and appends the stored ones to the worker's known_keys. With
-   * a throttle, each batch takes its tokens first, and each upsert feeds the
-   * detector with its own latency, measured from send to callback.
+   * Upserts the keys of every worker until each one is stored, or a stop is
+   * requested. The workers' keys are populated one worker after another, on
+   * the calling thread. In keyset mode a worker's keys are its slice of the
+   * keyset, and a failed key is retried under the same name. Otherwise they
+   * are --number-of-keys-to-populate new keys, the stored ones are appended to
+   * the worker's known_keys, and a failed key is replaced by a new one. The
+   * first failure of each worker is printed. Returns whether every key was
+   * stored. With a throttle, each batch takes its tokens first, and each
+   * upsert feeds the detector with its own latency, measured from send to
+   * callback.
    */
-  void populate_keys(const couchbase::cluster& cluster,
-                     std::vector<std::vector<std::string>>& known_keys,
-                     throttle* control) const
+  [[nodiscard]] auto populate_keys(const couchbase::cluster& cluster,
+                                   std::vector<std::vector<std::string>>& known_keys,
+                                   throttle* control) const -> bool
   {
-    const std::size_t total_keys{ number_of_worker_threads_ * number_of_keys_to_populate_ };
+    const std::size_t total_keys{ keyset_
+                                    ? keyset_->count()
+                                    : number_of_worker_threads_ * number_of_keys_to_populate_ };
 
     auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
@@ -1445,8 +1516,17 @@ private:
 
     std::size_t stored_keys{ 0 };
     std::size_t retried_keys{ 0 };
-    for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-      auto keys_left = number_of_keys_to_populate_;
+    for (std::size_t i = 0; i < number_of_worker_threads_ && still_running(); ++i) {
+      const auto slice =
+        keyset_ ? keyset_->slice(i, number_of_worker_threads_) : key_range{ "", 0, 0 };
+      std::size_t keys_left = keyset_ ? slice.count() : number_of_keys_to_populate_;
+      if (keys_left == 0) {
+        continue;
+      }
+      auto next_index = slice.start();
+      // A retry resends the value of the failed attempt, so a seeded dataset is reproducible.
+      std::vector<std::pair<std::string, couchbase::codec::encoded_value>> failed_keys;
+      bool failure_reported{ false };
       auto body = make_body_generator(i);
 
       while (keys_left > 0 && still_running()) {
@@ -1466,17 +1546,29 @@ private:
           break;
         }
 
-        std::vector<std::pair<std::string, std::future<couchbase::error>>> futures;
+        std::vector<
+          std::tuple<std::string, couchbase::codec::encoded_value, std::future<couchbase::error>>>
+          futures;
         futures.reserve(batch_size);
         for (std::size_t k = 0; k < batch_size; ++k) {
-          std::string document_id = uniq_id("id");
+          std::string document_id;
+          couchbase::codec::encoded_value value{};
+          if (!failed_keys.empty()) {
+            std::tie(document_id, value) = std::move(failed_keys.back());
+            failed_keys.pop_back();
+          } else {
+            document_id = keyset_ ? slice.key_at(next_index++) : uniq_id("id");
+            value = encode_body(body.next(), body.binary());
+          }
           // Every result is read below, so each handler has run, and finished with
           // control, before populate_keys returns.
           auto result = std::make_shared<std::promise<couchbase::error>>();
-          futures.emplace_back(document_id, result->get_future());
+          // Only keyset mode retries, so only it keeps a copy of the value.
+          futures.emplace_back(
+            document_id, keyset_ ? value : couchbase::codec::encoded_value{}, result->get_future());
           collection.upsert(
             std::move(document_id),
-            encode_body(body.next(), body.binary()),
+            std::move(value),
             {},
             [result, control, start = std::chrono::steady_clock::now()](
               const couchbase::error& err, const couchbase::mutation_result& /* result */) {
@@ -1488,12 +1580,27 @@ private:
             });
         }
 
-        for (auto&& [document_id, future] : futures) {
+        for (auto&& [document_id, value, future] : futures) {
           const auto ctx = future.get();
           if (ctx.ec()) {
             ++retried_keys;
+            if (!failure_reported) {
+              failure_reported = true;
+              fmt::print(stderr,
+                         "{}worker {}: failed to store \"{}\"{}: {}\n",
+                         clear_line(),
+                         i,
+                         document_id,
+                         keyset_ ? ", retrying" : "",
+                         ctx.ec().message());
+            }
+            if (keyset_) {
+              failed_keys.emplace_back(std::move(document_id), std::move(value));
+            }
           } else {
-            known_keys[i].emplace_back(document_id);
+            if (!keyset_) {
+              known_keys[i].push_back(std::move(document_id));
+            }
             ++stored_keys;
             --keys_left;
           }
@@ -1510,6 +1617,7 @@ private:
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
                std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count(),
                retried_keys);
+    return stored_keys == total_keys;
   }
 
   common_options common_options_{};
@@ -1534,6 +1642,14 @@ private:
   std::uint64_t document_body_seed_{ 0 };
   std::size_t document_body_size_{};
   std::size_t operations_limit_{};
+  std::string key_prefix_{};
+  std::uint32_t number_of_items_{};
+  std::uint32_t start_at_{};
+  bool no_population_{ false };
+  bool populate_only_{ false };
+  // Set at parse time when --number-of-items is given; keyset mode is on when set.
+  // key_range::validate() has rejected an empty count.
+  std::optional<key_range> keyset_{};
 };
 } // namespace
 
