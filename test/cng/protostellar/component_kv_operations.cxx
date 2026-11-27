@@ -325,6 +325,9 @@ public:
   {
     record(request);
     last.lookup_in = *request;
+    if (auto status = check_spec_count(request->specs_size()); !status.ok()) {
+      return status;
+    }
     if (auto status = fail_for(request->key()); !status.ok()) {
       return status;
     }
@@ -417,6 +420,9 @@ public:
     last.has_cas = request->has_cas();
     last.cas = request->cas();
     last.mutate_in = *request;
+    if (auto status = check_spec_count(request->specs_size()); !status.ok()) {
+      return status;
+    }
     if (auto status = fail_for(request->key()); !status.ok()) {
       return status;
     }
@@ -495,6 +501,19 @@ public:
   grpc::Status programmed{ grpc::Status::OK };
 
 private:
+  // The server, not the SDK, owns the subdoc spec limit: the SDK passes any number of specs through
+  // and surfaces the server's rejection. The double enforces the same 16-spec limit so that path
+  // is exercised.
+  static constexpr int max_subdoc_specs{ 16 };
+
+  [[nodiscard]] static auto check_spec_count(int specs_size) -> grpc::Status
+  {
+    if (specs_size > max_subdoc_specs) {
+      return { grpc::StatusCode::INVALID_ARGUMENT, "too many subdoc specs" };
+    }
+    return grpc::Status::OK;
+  }
+
   template<typename Request>
   void record(const Request* request)
   {
@@ -1265,21 +1284,24 @@ lookup_in_rejects_empty_specs_without_dispatching([[maybe_unused]] context& ctx)
   assert_true(non_empty_value_out.ctx.ec() == couchbase::errc::common::invalid_argument,
               "lookup_in spec with non-empty value fails with invalid_argument");
 
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
+
+  // The spec limit is the server's to enforce: 17 specs are dispatched and the server's
+  // INVALID_ARGUMENT surfaces as invalid_argument.
   ops::lookup_in_request oversized_req;
   oversized_req.id = make_id("k1");
   oversized_req.specs.assign(17, command{ opcode::get, "a", {}, {} });
   const auto oversized_out = run(server, std::move(oversized_req));
   assert_true(oversized_out.ctx.ec() == couchbase::errc::common::invalid_argument,
               "lookup_in with 17 specs fails with invalid_argument");
-
-  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
+  assert_eq(server.service().last.call_count, std::size_t{ 1 }, "17-spec lookup_in reached server");
 
   ops::lookup_in_request max_valid_req;
   max_valid_req.id = make_id("k1");
   max_valid_req.specs.assign(16, command{ opcode::get, "a", {}, {} });
   const auto max_valid_out = run(server, std::move(max_valid_req));
-  assert_false(static_cast<bool>(max_valid_out.ctx.ec()), "lookup_in with 16 specs is dispatched");
-  assert_eq(server.service().last.call_count, std::size_t{ 1 }, "16-spec lookup_in reached server");
+  assert_false(static_cast<bool>(max_valid_out.ctx.ec()), "lookup_in with 16 specs succeeds");
+  assert_eq(server.service().last.call_count, std::size_t{ 2 }, "16-spec lookup_in reached server");
 }
 
 void
@@ -1475,21 +1497,22 @@ mutate_in_rejects_invalid_requests_without_dispatching([[maybe_unused]] context&
   assert_eq(
     server.service().last.call_count, std::size_t{ 0 }, "insert+preserve_expiry not dispatched");
 
+  // The spec limit is the server's to enforce: 17 specs are dispatched and the server's
+  // INVALID_ARGUMENT surfaces as invalid_argument.
   ops::mutate_in_request oversized;
   oversized.id = make_id("k1");
   oversized.specs.assign(17, command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} });
   const auto oversized_outcome = run(server, std::move(oversized));
   assert_true(oversized_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
               "mutate_in with 17 specs fails with invalid_argument");
-  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "oversized specs not dispatched");
+  assert_eq(server.service().last.call_count, std::size_t{ 1 }, "17-spec mutate_in reached server");
 
   ops::mutate_in_request max_valid;
   max_valid.id = make_id("k1");
   max_valid.specs.assign(16, command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} });
   const auto max_valid_outcome = run(server, std::move(max_valid));
-  assert_false(static_cast<bool>(max_valid_outcome.ctx.ec()),
-               "mutate_in with 16 specs is dispatched");
-  assert_eq(server.service().last.call_count, std::size_t{ 1 }, "16-spec mutate_in reached server");
+  assert_false(static_cast<bool>(max_valid_outcome.ctx.ec()), "mutate_in with 16 specs succeeds");
+  assert_eq(server.service().last.call_count, std::size_t{ 2 }, "16-spec mutate_in reached server");
 }
 
 void

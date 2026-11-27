@@ -768,8 +768,6 @@ component::execute(const operations::append_request& request,
 
 namespace
 {
-constexpr std::size_t max_subdoc_specs{ 16 };
-
 [[nodiscard]] auto
 is_valid_lookup_in_opcode(impl::subdoc::opcode opcode) -> bool
 {
@@ -915,8 +913,7 @@ component::execute(const operations::lookup_in_request& request,
   if (has_unsupported_lookup_in_feature(request)) {
     return fail_feature_not_available(io_, request, handler);
   }
-  if (request.specs.empty() || request.specs.size() > max_subdoc_specs ||
-      !has_only_valid_lookup_in_specs(request)) {
+  if (request.specs.empty() || !has_only_valid_lookup_in_specs(request)) {
     return fail_invalid_argument(io_, request, handler);
   }
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
@@ -955,8 +952,7 @@ component::execute(const operations::mutate_in_request& request,
   if (has_unsupported_mutate_in_feature(request)) {
     return fail_feature_not_available(io_, request, handler);
   }
-  if (request.specs.empty() || request.specs.size() > max_subdoc_specs ||
-      !has_only_valid_mutate_in_specs(request) ||
+  if (request.specs.empty() || !has_only_valid_mutate_in_specs(request) ||
       (request.store_semantics != couchbase::store_semantics::replace && !request.cas.empty()) ||
       (request.store_semantics == couchbase::store_semantics::insert && request.preserve_expiry)) {
     return fail_invalid_argument(io_, request, handler);
