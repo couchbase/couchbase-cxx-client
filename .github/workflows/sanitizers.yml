@@ -206,6 +206,9 @@ jobs:
         with:
           alias: ${{ matrix.server }}
       - name: Create Couchbase cluster with cbdinocluster
+        # cbdinocluster sets no deadline; without one a hung allocation holds the job for the
+        # 360-minute default and ends it cancelled, which re-running failed jobs skips.
+        timeout-minutes: 20
         id: cbdino
         uses: ./.github/actions/create-cluster
         with:
@@ -231,6 +234,7 @@ jobs:
           chmod -R +x ./cmake-build-tests-${{ matrix.sanitizer }}
           ./bin/run-integration-tests
       - name: Remove Couchbase cluster
+        timeout-minutes: 10
         uses: ./.github/actions/remove-cluster
         with:
           id: ${{ steps.cbdino.outputs.id }}

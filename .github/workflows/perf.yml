@@ -105,6 +105,9 @@ jobs:
         with:
           alias: 8.0-release
       - name: Create Couchbase cluster with cbdinocluster
+        # cbdinocluster sets no deadline; without one a hung allocation holds the job for the
+        # 360-minute default and ends it cancelled, which re-running failed jobs skips.
+        timeout-minutes: 20
         id: cbdino
         uses: ./.github/actions/create-cluster
         with:
@@ -139,6 +142,7 @@ jobs:
           # A re-run of this job replaces the report of the earlier attempt.
           overwrite: true
       - name: Remove Couchbase cluster
+        timeout-minutes: 10
         if: always() && steps.cbdino.outputs.id != ''
         uses: ./.github/actions/remove-cluster
         with:
