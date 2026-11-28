@@ -101,19 +101,25 @@ That is why the option refuses a pool below 1 MiB rather than warning about it.
 
 ### OPERATION RATIO
 
-Each worker thread draws every operation at random, in proportion to its weight in `--operation-ratio`. The weights are whole numbers, separated by colons, in the order Get, Replace, Delete, Insert, Query, Upsert.
+Each worker thread draws every operation at random, in proportion to its weight in `--operation-ratio`. The weights are whole numbers, separated by colons, in the order Get, Replace, Delete, Insert, Query, Upsert. A term may instead name its operation by first letter, case-insensitive, as in `G=9:U=1`.
 
 | `--operation-ratio` | Workload |
 |---|---|
 | `1:1:0:0:0:0` | as many gets as replaces (the default) |
 | `9:1:0:0:0` | nine gets per replace; a ratio without the sixth term has no upserts |
-| `0:0:0:0:0:1` | upserts only |
+| `0:0:0:0:0:1`, `U=1` | upserts only |
+| `G=9:U=1`, `g=9::u=1` | nine gets per upsert, and nothing else |
+| `G=1:0:0:0:0:U=1` | one get per upsert: the positional terms fill Replace to Query |
+| `R=2:5` | two replaces per five deletes |
 
 - Outside keyset mode, gets, replaces, deletes and upserts pick a key the worker already knows: one it populated or inserted. Inserts write a new key.
 - An upsert creates the document when it is missing; a replace fails with `document_not_found`. On a full-eviction bucket, a replace of a document that is not in memory may make the server read it from disk first. An upsert does not need the old document, though the server may still read its metadata from disk when documents in the bucket carry extended attributes.
 - A deleted key stays in the worker's list. Gets, replaces and deletes of it fail with `document_not_found` until an upsert writes it again.
 - A worker that knows no key, because `--number-of-keys-to-populate` is 0, sends each get, replace, delete and upsert to a new key until it has inserted one. An inserted key becomes known in batch mode to the first batch that starts after the insert, and with `--pipeline` once the insert succeeds. The gets, replaces and deletes fail with `document_not_found`, and each upsert writes a document that no later operation picks.
-- A term is read as a whole number up to its first non-digit, without a message: `1x` reads as 1. An empty term, or one such as `x` or `-1` that does not start with a digit, keeps its default: `9:x` runs `9:1:0:0:0:0`. A ratio whose weights all come out 0, such as `0:0:-1:0:0`, is an error.
+- Naming any term sets every weight not given to 0. `G=9:U=1` runs no replaces, while `9` runs `9:1:0:0:0:0`.
+- An unnamed term sets the weight after the previous term. In `R=2:5` the 5 is the delete weight; in `R=2::5` the empty term leaves deletes at 0 and the 5 is the insert weight.
+- A named term is checked: an unknown letter or a value that is not a whole number, such as `X=1` or `G=1x`, is an error. So is a ratio whose weights are all 0. An unnamed term after the Upsert slot is ignored.
+- An unnamed term is read as a whole number up to its first non-digit, without a message: `1x` reads as 1. An empty term, or one such as `x` or `-1` that does not start with a digit, leaves its weight as it is: `9:x` runs `9:1:0:0:0:0`, and in `D=4:R=2::5` the empty term keeps deletes at 4.
 - In keyset mode, deletes and inserts are rejected; see KEYSET MODE.
 
 ### KEYSET MODE
@@ -220,10 +226,18 @@ In batch mode the next batch starts only after the slowest operation of the curr
 **Overwrite documents with upserts.**
 
 ```
-cbc pillowfight --operation-ratio 0:0:0:0:0:1
+cbc pillowfight --operation-ratio U=1
 ```
 
 Upserts only; see OPERATION RATIO for how an upsert differs from a replace.
+
+**Mix reads with blind overwrites, naming only the operations that run.**
+
+```
+cbc pillowfight --operation-ratio G=9:U=1
+```
+
+Nine gets per upsert, and no other operation.
 
 **Measure a read-heavy workload with 4 KiB documents.**
 

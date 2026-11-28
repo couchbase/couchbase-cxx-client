@@ -17,10 +17,14 @@
 
 #pragma once
 
+#include <array>
+#include <cctype>
 #include <charconv>
 #include <cstddef>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -47,28 +51,53 @@ struct operation_weights {
   }
 };
 
-/// Parses "G:R:D:I:Q:U". A term is read up to its first non-digit; one that is missing, empty,
-/// does not start with a digit or overflows keeps its default, so a five-term ratio has no
-/// upserts and "-1" cannot wrap to a huge weight.
+/// Parses "G:R:D:I:Q:U". A positional term is read up to its first non-digit; one that is missing,
+/// empty, does not start with a digit or overflows leaves its weight unchanged, so a purely
+/// positional five-term ratio has no upserts and "-1" cannot wrap to a huge weight. A term may
+/// instead name its operation by first letter, case-insensitive ("G=1:U=1"); then every weight not
+/// given is 0, and a positional term sets the weight after the previous term. A positional term
+/// past the Upsert slot is ignored. Throws std::invalid_argument for a named term with an unknown
+/// letter or a value that is not a whole number, wherever it stands.
 inline auto
 parse_operation_weights(const std::string& input) -> operation_weights
 {
   operation_weights weights;
+  if (input.find('=') != std::string::npos) {
+    weights = { 0, 0, 0, 0, 0, 0 };
+  }
+  const std::array<std::size_t*, 6> terms{ &weights.gets,    &weights.replaces, &weights.deletes,
+                                           &weights.inserts, &weights.queries,  &weights.upserts };
+  constexpr std::string_view letters{ "GRDIQU" };
   std::stringstream is(input);
   std::string token;
-  for (auto* term : { &weights.gets,
-                      &weights.replaces,
-                      &weights.deletes,
-                      &weights.inserts,
-                      &weights.queries,
-                      &weights.upserts }) {
-    if (!std::getline(is, token, ':')) {
-      break;
+  std::size_t position{ 0 };
+  while (std::getline(is, token, ':')) {
+    if (const auto eq = token.find('='); eq != std::string::npos) {
+      const auto letter =
+        eq == 1
+          ? letters.find(static_cast<char>(std::toupper(static_cast<unsigned char>(token[0]))))
+          : std::string_view::npos;
+      std::size_t value{};
+      const auto* first = token.data() + eq + 1;
+      const auto* last = token.data() + token.size();
+      const auto [end, ec] = std::from_chars(first, last, value);
+      if (letter == std::string_view::npos || first == last || ec != std::errc{} || end != last) {
+        throw std::invalid_argument("--operation-ratio term \"" + token +
+                                    "\" is not one of G, R, D, I, Q or U followed by "
+                                    "=<whole number>");
+      }
+      position = letter;
+      *terms[position++] = value;
+      continue;
+    }
+    if (position >= terms.size()) {
+      continue;
     }
     std::size_t value{};
     if (std::from_chars(token.data(), token.data() + token.size(), value).ec == std::errc{}) {
-      *term = value;
+      *terms[position] = value;
     }
+    ++position;
   }
   return weights;
 }

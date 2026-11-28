@@ -655,7 +655,8 @@ public:
       "ratio of the operations in whole numbers: Get, Replace, Delete, Insert, Query and Upsert "
       "respectively. (e.g. 5:2:1:1:0 would do on average 5 gets for every insert). The Upsert "
       "term may be omitted and is then 0. An upsert picks its key like a replace, but creates "
-      "the document when it is missing.")
+      "the document when it is missing. A term may name its operation by first letter, "
+      "case-insensitive: \"G=1:U=1\" sets gets and upserts and leaves every other weight at 0.")
       ->default_val(default_operation_ratio.to_string());
     add_option("--operations-limit",
                operations_limit_,
@@ -912,7 +913,13 @@ private:
   void validate_options() const
   {
     // std::discrete_distribution requires a positive total weight.
-    const auto terms = parse_operation_weights(operation_ratio_string_).to_vector();
+    operation_weights weights;
+    try {
+      weights = parse_operation_weights(operation_ratio_string_);
+    } catch (const std::invalid_argument& e) {
+      throw CLI::ValidationError(e.what());
+    }
+    const auto terms = weights.to_vector();
     if (std::all_of(terms.begin(), terms.end(), [](std::size_t w) {
           return w == 0;
         })) {
