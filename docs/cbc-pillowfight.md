@@ -26,14 +26,14 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--pipeline`</dt><dd>Keep `--operation-batch-size` operations in flight per worker thread and send the next one as soon as any completes, instead of waiting for the whole batch. One slow operation, such as a query, then holds one slot rather than the whole batch. When the client is bound by the SDK's I/O thread, every operation in the window waits in its queue, so a smaller window lowers tail latency. With `--document-body-fill=random` and no `--document-body-pool-size`, the next operation is generated on pillowfight's I/O threads rather than the SDK's. Conflicts with `--batch-wait`.</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of I/O threads for pillowfight's own timers and deferred sends, at least 1. The SDK runs its own I/O thread. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the worker threads, at least 1. [default: `1`]</dd>
-<dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
+<dt>`--operation-ratio=TEXT`</dt><dd>Relative weights of the operations to generate, as "G:R:D:I:Q:U": Get, Replace, Delete, Insert, Query and Upsert. See OPERATION RATIO. [default: `1:1:0:0:0:0`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
 <dt>`--document-body-fill=MODE`</dt><dd>How to fill a generated document body (allowed values: `constant`, `random`). `constant` repeats a single character; `random` draws every document from a seeded pseudo-random generator. Only `random` gives each document distinct bytes. [default: `constant`]</dd>
 <dt>`--document-body-format=FORMAT`</dt><dd>Format of a generated document (allowed values: `json`, `binary`). `json` wraps the body in a JSON object and restricts it to a JSON-safe alphabet; `binary` stores the body as opaque bytes of exactly `--document-body-size`. [default: `json`]</dd>
 <dt>`--document-body-pool-size=INTEGER`</dt><dd>Pre-generate this many bytes of document bodies per worker thread and cycle through them, instead of generating a fresh body for every document. Measured in bytes, with a floor of 1 MiB. [default: `0`]</dd>
 <dt>`--document-body-seed=INTEGER`</dt><dd>Seed for `--document-body-fill=random`, so that a dataset can be reproduced. Each worker thread offsets it by its index. Without it the generator is seeded from the system entropy source.</dd>
-<dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload this many keys per worker thread before running the workload. Gets, replaces and deletes pick from the keys known to the worker; inserts add new keys. Conflicts with `--number-of-items`. [default: `1000`]</dd>
+<dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload this many keys per worker thread before running the workload. Gets, replaces, deletes and upserts pick from the keys known to the worker; inserts add new keys. Conflicts with `--number-of-items`. [default: `1000`]</dd>
 <dt>`--number-of-items=INTEGER`</dt><dd>Use a fixed keyset, named as the C pillowfight names its documents. Enables keyset mode, described under KEYSET MODE below. Population retries a failed key under the same name until it is stored or a stop is requested, so a permanent error needs Ctrl-C. Conflicts with `--number-of-keys-to-populate`.</dd>
 <dt>`--key-prefix=STRING`</dt><dd>Prefix for every key of the keyset, at most 230 bytes in the default collection and 226 in any other; empty when not given. Requires `--number-of-items`.</dd>
 <dt>`--start-at=INTEGER`</dt><dd>First index of the keyset. Requires `--number-of-items`. [default: `0`]</dd>
@@ -99,6 +99,23 @@ in bytes, which a document count does not describe. A pool smaller than that dis
 same body into one block twice and the documents compress again, silently and by a large factor.
 That is why the option refuses a pool below 1 MiB rather than warning about it.
 
+### OPERATION RATIO
+
+Each worker thread draws every operation at random, in proportion to its weight in `--operation-ratio`. The weights are whole numbers, separated by colons, in the order Get, Replace, Delete, Insert, Query, Upsert.
+
+| `--operation-ratio` | Workload |
+|---|---|
+| `1:1:0:0:0:0` | as many gets as replaces (the default) |
+| `9:1:0:0:0` | nine gets per replace; a ratio without the sixth term has no upserts |
+| `0:0:0:0:0:1` | upserts only |
+
+- Outside keyset mode, gets, replaces, deletes and upserts pick a key the worker already knows: one it populated or inserted. Inserts write a new key.
+- An upsert creates the document when it is missing; a replace fails with `document_not_found`. On a full-eviction bucket, a replace of a document that is not in memory may make the server read it from disk first. An upsert does not need the old document, though the server may still read its metadata from disk when documents in the bucket carry extended attributes.
+- A deleted key stays in the worker's list. Gets, replaces and deletes of it fail with `document_not_found` until an upsert writes it again.
+- A worker that knows no key, because `--number-of-keys-to-populate` is 0, sends each get, replace, delete and upsert to a new key until it has inserted one. An inserted key becomes known in batch mode to the first batch that starts after the insert, and with `--pipeline` once the insert succeeds. The gets, replaces and deletes fail with `document_not_found`, and each upsert writes a document that no later operation picks.
+- A term is read as a whole number up to its first non-digit, without a message: `1x` reads as 1. An empty term, or one such as `x` or `-1` that does not start with a digit, keeps its default: `9:x` runs `9:1:0:0:0:0`. A ratio whose weights all come out 0, such as `0:0:-1:0:0`, is an error.
+- In keyset mode, deletes and inserts are rejected; see KEYSET MODE.
+
 ### KEYSET MODE
 
 `--number-of-items` switches the workload to a fixed keyset that can be reused across runs, including a dataset loaded by the C pillowfight (`cbc-pillowfight`).
@@ -106,7 +123,7 @@ That is why the option refuses a pool below 1 MiB rather than warning about it.
 - Keys are `--key-prefix` followed by the index as 20 zero-padded digits, for every index in `[--start-at, --start-at + --number-of-items)`. This is the C pillowfight's format: `--key-prefix user_ --number-of-items 1000` names `user_00000000000000000000` to `user_00000000000000000999`.
 - `--start-at + --number-of-items` must not exceed 2147483648. The C pillowfight prints larger indices as negative numbers, so they would name different documents.
 - Population splits the range into contiguous slices, one per worker thread, and upserts the slices in turn on the main thread. A failed key is retried under the same name until it is stored or a stop is requested; a permanent error, such as a missing collection, needs Ctrl-C. `--no-population` skips population; `--populate-only` exits after it.
-- Gets and replaces pick a key uniformly from the whole range. Deletes and inserts would add or remove keys, so a non-zero delete or insert weight in `--operation-ratio` is rejected. `--query-statement` runs as given, so a statement that inserts or deletes documents changes the keyset.
+- Gets, replaces and upserts pick a key uniformly from the whole range. Deletes and inserts would add or remove keys, so a non-zero delete or insert weight in `--operation-ratio` is rejected. `--query-statement` runs as given, so a statement that inserts or deletes documents changes the keyset.
 
 A dataset loaded by the C pillowfight may have gaps. Its sequential generator skips keys when `--num-items` is not divisible by `--num-threads`. It can also skip keys when `--start-at` is not zero, even with one thread. A get or replace of a missing key reports `document_not_found`. Loading with `--start-at 0` and a thread count that divides `--num-items` avoids the gaps.
 
@@ -199,6 +216,14 @@ cbc pillowfight --pipeline --operation-ratio 10:10:0:0:1
 ```
 
 In batch mode the next batch starts only after the slowest operation of the current one, the query included. With `--pipeline` the query holds one slot of the window and the other slots keep cycling. The default `--query-statement` needs an index on the bucket.
+
+**Overwrite documents with upserts.**
+
+```
+cbc pillowfight --operation-ratio 0:0:0:0:0:1
+```
+
+Upserts only; see OPERATION RATIO for how an upsert differs from a replace.
 
 **Measure a read-heavy workload with 4 KiB documents.**
 

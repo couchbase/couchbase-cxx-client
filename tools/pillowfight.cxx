@@ -53,6 +53,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <csignal>
+#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <future>
@@ -86,6 +87,7 @@ enum class operation : std::uint8_t {
   cmd_delete,
   cmd_insert,
   cmd_query,
+  cmd_upsert,
 };
 
 class operation_generator
@@ -117,11 +119,9 @@ private:
   std::random_device random_device_;
   std::mt19937 generator_{ random_device_() };
 
-  std::vector<operation> operations_{ operation::cmd_get,
-                                      operation::cmd_replace,
-                                      operation::cmd_delete,
-                                      operation::cmd_insert,
-                                      operation::cmd_query };
+  std::vector<operation> operations_{ operation::cmd_get,    operation::cmd_replace,
+                                      operation::cmd_delete, operation::cmd_insert,
+                                      operation::cmd_query,  operation::cmd_upsert };
   operation_weights weights_;
   std::vector<std::size_t> weights_vector_;
   std::discrete_distribution<std::size_t> distribution_;
@@ -507,7 +507,12 @@ dump_stats(asio::steady_timer& timer, stats_tick& tick, throttle* control)
 auto
 uniq_id(const std::string& prefix) -> std::string
 {
-  return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
+  // The sequence keeps keys distinct when two workers read the same clock tick.
+  static std::atomic<std::uint64_t> sequence{ 0 };
+  return fmt::format("{}_{}_{}",
+                     prefix,
+                     std::chrono::steady_clock::now().time_since_epoch().count(),
+                     sequence.fetch_add(1, std::memory_order_relaxed));
 }
 
 /**
@@ -541,6 +546,16 @@ replace_document(const couchbase::collection& collection,
                  couchbase::replace_handler&& handler)
 {
   collection.replace(std::move(document_id), encode_body(body, binary), {}, std::move(handler));
+}
+
+void
+upsert_document(const couchbase::collection& collection,
+                std::string document_id,
+                const std::vector<std::byte>& body,
+                bool binary,
+                couchbase::upsert_handler&& handler)
+{
+  collection.upsert(std::move(document_id), encode_body(body, binary), {}, std::move(handler));
 }
 
 class pillowfight_app : public CLI::App
@@ -595,15 +610,16 @@ public:
       add_option("--number-of-keys-to-populate",
                  number_of_keys_to_populate_,
                  "Preload this many keys per worker thread before running the workload. Gets, "
-                 "replaces and deletes pick from the keys known to the worker; inserts add new "
-                 "keys.")
+                 "replaces, deletes and upserts pick from the keys known to the worker; inserts "
+                 "add new keys.")
         ->default_val(default_number_of_keys_to_populate);
     auto* number_of_items =
       add_option("--number-of-items",
                  number_of_items_,
                  "Use the fixed keyset --key-prefix + 20-digit index, for every index in "
                  "[--start-at, --start-at + --number-of-items), named as the C pillowfight names "
-                 "its documents. Gets and replaces pick a key uniformly from the whole range; "
+                 "its documents. Gets, replaces and upserts pick a key uniformly from the whole "
+                 "range; "
                  "deletes and inserts are rejected, so the dataset can be reused across runs. "
                  "Population retries a failed key under the same name until it is stored or a stop "
                  "is requested, so a permanent error needs Ctrl-C.")
@@ -635,9 +651,11 @@ public:
     add_option(
       "--operation-ratio",
       operation_ratio_string_,
-      "The ratio of the operations to generate in form \"G:R:D:I:Q\", where letters represent "
-      "ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query "
-      "respectively. (e.g. 5:2:1:1:0 would do on average 5 gets for every insert)")
+      "The ratio of the operations to generate in form \"G:R:D:I:Q:U\", where letters represent "
+      "ratio of the operations in whole numbers: Get, Replace, Delete, Insert, Query and Upsert "
+      "respectively. (e.g. 5:2:1:1:0 would do on average 5 gets for every insert). The Upsert "
+      "term may be omitted and is then 0. An upsert picks its key like a replace, but creates "
+      "the document when it is missing.")
       ->default_val(default_operation_ratio.to_string());
     add_option("--operations-limit",
                operations_limit_,
@@ -740,7 +758,7 @@ public:
                "Workload Plan\n"
                "| Version: {}\n"
                "| Connection String: {}\n"
-               "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
+               "| Ratio: {} (Get:Replace:Delete:Insert:Query:Upsert)\n"
                "| Mode: {}\n"
                "| Throttle: {}\n"
                "| Document body: {} {}, {}\n"
@@ -831,12 +849,12 @@ public:
     if (keyset_) {
       fmt::print("Keyset size: {}\n", keyset_->count());
     } else {
-      // Pipeline handlers append to known_keys under their worker's mutex until io stops.
+      // Pipeline handlers append to known_keys under their worker's keys_mutex until io stops.
       std::size_t keys_used{ 0 };
       for (std::size_t i = 0; i < known_keys.size(); ++i) {
         std::unique_lock<std::mutex> lock{};
         if (pipeline_) {
-          lock = std::unique_lock{ workers[i].mutex };
+          lock = std::unique_lock{ workers[i].keys_mutex };
         }
         keys_used += known_keys[i].size();
       }
@@ -893,6 +911,13 @@ private:
 
   void validate_options() const
   {
+    // std::discrete_distribution requires a positive total weight.
+    const auto terms = parse_operation_weights(operation_ratio_string_).to_vector();
+    if (std::all_of(terms.begin(), terms.end(), [](std::size_t w) {
+          return w == 0;
+        })) {
+      throw CLI::ValidationError("--operation-ratio needs at least one non-zero weight");
+    }
     if (operation_batch_size_ == 0) {
       throw CLI::ValidationError("--operation-batch-size cannot be zero");
     }
@@ -1162,6 +1187,12 @@ private:
             auto handler = make_handler(operation);
             cluster.query(query_statement, {}, std::move(handler));
           } break;
+          case operation::cmd_upsert: {
+            const auto& document = body.next();
+            auto handler = make_handler(operation);
+            upsert_document(
+              collection, std::move(document_id), document, body.binary(), std::move(handler));
+          } break;
         }
       }
 
@@ -1236,6 +1267,8 @@ private:
     operation_generator operations;
     std::mt19937_64 gen{ std::random_device{}() };
     document_body_generator body;
+    // Guards known_keys alone, so a completion never waits for a body generation.
+    std::mutex keys_mutex{};
     std::vector<std::string>& known_keys;
   };
 
@@ -1409,18 +1442,22 @@ private:
         const std::scoped_lock lock(state.mutex);
         op = state.operations.next_operation();
         if (op != operation::cmd_query) {
+          const std::scoped_lock keys_lock(state.keys_mutex);
           document_id = pick_key(op, state.known_keys, state.known_keys.size(), state.gen);
         }
-        if (op == operation::cmd_insert) {
-          state.known_keys.push_back(document_id);
-        }
-        if (op == operation::cmd_insert || op == operation::cmd_replace) {
+        if (op == operation::cmd_insert || op == operation::cmd_replace ||
+            op == operation::cmd_upsert) {
           value = encode_body(state.body.next(), state.body.binary());
         }
       }
 
-      auto handler = [this, state = &state, settled, op, start = std::chrono::steady_clock::now()](
-                       const couchbase::error& err, const auto& /* result */) {
+      auto handler = [this,
+                      state = &state,
+                      settled,
+                      op,
+                      inserted_key = op == operation::cmd_insert ? document_id : std::string{},
+                      start = std::chrono::steady_clock::now()](const couchbase::error& err,
+                                                                const auto& /* result */) {
         if (settled->exchange(true, std::memory_order_acq_rel)) {
           return;
         }
@@ -1429,6 +1466,11 @@ private:
         if (!state->window.abandoned.load(std::memory_order_acquire)) {
           try {
             on_completion(op, std::chrono::steady_clock::now() - start, err, state->control);
+            // Published once stored, so no slot picks a key whose insert is in flight.
+            if (op == operation::cmd_insert && !err) {
+              const std::scoped_lock lock(state->keys_mutex);
+              state->known_keys.push_back(inserted_key);
+            }
           } catch (...) {
             // May run on an SDK I/O thread or inline in the send, and must still
             // settle the slot, so the exception is caught and the dropped record
@@ -1460,6 +1502,10 @@ private:
           break;
         case operation::cmd_query:
           state.cluster.query(state.query_statement, {}, std::move(handler));
+          break;
+        case operation::cmd_upsert:
+          state.collection.upsert(
+            std::move(document_id), std::move(*value), {}, std::move(handler));
           break;
       }
     } catch (...) {

@@ -17,10 +17,11 @@
 
 #pragma once
 
+#include <charconv>
 #include <cstddef>
 #include <sstream>
-#include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace cbc
@@ -31,43 +32,49 @@ struct operation_weights {
   std::size_t deletes{ 0 };
   std::size_t inserts{ 0 };
   std::size_t queries{ 0 };
+  std::size_t upserts{ 0 };
 
   [[nodiscard]] auto to_string() const -> std::string
   {
     return std::to_string(gets) + ":" + std::to_string(replaces) + ":" + std::to_string(deletes) +
-           ":" + std::to_string(inserts) + ":" + std::to_string(queries);
+           ":" + std::to_string(inserts) + ":" + std::to_string(queries) + ":" +
+           std::to_string(upserts);
   }
 
   [[nodiscard]] auto to_vector() const -> std::vector<std::size_t>
   {
-    return { gets, replaces, deletes, inserts, queries };
+    return { gets, replaces, deletes, inserts, queries, upserts };
   }
 };
 
-/// Parses "G:R:D:I:Q". A term that is missing or not a number keeps its default.
+/// Parses "G:R:D:I:Q:U". A term is read up to its first non-digit; one that is missing, empty,
+/// does not start with a digit or overflows keeps its default, so a five-term ratio has no
+/// upserts and "-1" cannot wrap to a huge weight.
 inline auto
 parse_operation_weights(const std::string& input) -> operation_weights
 {
   operation_weights weights;
   std::stringstream is(input);
   std::string token;
-  for (auto* term :
-       { &weights.gets, &weights.replaces, &weights.deletes, &weights.inserts, &weights.queries }) {
+  for (auto* term : { &weights.gets,
+                      &weights.replaces,
+                      &weights.deletes,
+                      &weights.inserts,
+                      &weights.queries,
+                      &weights.upserts }) {
     if (!std::getline(is, token, ':')) {
       break;
     }
-    try {
-      *term = std::stoull(token);
-    } catch (const std::invalid_argument&) {
-      /* keep the default */
-    } catch (const std::out_of_range&) {
-      /* keep the default */
+    std::size_t value{};
+    if (std::from_chars(token.data(), token.data() + token.size(), value).ec == std::errc{}) {
+      *term = value;
     }
   }
   return weights;
 }
 
-/// Whether a workload with these weights keeps every key: it neither deletes nor inserts.
+/// Whether a workload with these weights keeps every key: it neither deletes nor inserts. In
+/// keyset mode an upsert, like a replace, writes a key inside the keyset.
 [[nodiscard]] inline auto
 keeps_every_key(const operation_weights& weights) -> bool
 {
